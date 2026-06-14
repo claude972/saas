@@ -208,6 +208,10 @@ async def send_command(
 
     Le backend traite la commande en arrière-plan et retourne immédiatement
     la commande créée avec son statut "received".
+
+    Note : pour remonter les appels d'offres BTP détectés par la veille
+    automatique, utiliser list_new_offers (liste les offres status="new")
+    plutôt que send_command.
     """
     body: dict[str, Any] = {"source": "openclaw", "instruction": instruction}
     if project_id is not None:
@@ -611,6 +615,167 @@ async def list_project_logs(project_id: str) -> list | dict:
     - project_id : UUID du projet dont on veut l'historique.
     """
     return await _request("GET", f"/logs/{project_id}")
+
+
+# ---------------------------------------------------------------------------
+# Outils — Appels d'offres (veille BTP)
+# ---------------------------------------------------------------------------
+@mcp.tool()
+async def list_new_offers(limit: int = 20) -> list | dict:
+    """Liste les appels d'offres BTP récemment détectés par la veille, au statut "new".
+
+    Utiliser cet outil pour consulter les nouvelles opportunités remontées
+    automatiquement par la veille Perplexity ou browser_use : chaque offre
+    contient un titre, un résumé, l'organisation émettrice, les lots, la région,
+    la date limite de réponse et un score de pertinence.
+
+    C'est le point d'entrée principal d'OpenClaw pour traiter les appels d'offres :
+    après consultation, utiliser analyze_tender_offer pour produire une analyse
+    structurée, puis update_tender (via l'API directe) pour changer le statut.
+
+    Paramètre :
+    - limit : nombre maximum d'offres à retourner (défaut 20, max 100).
+    """
+    return await _request("GET", "/tenders/new", params={"limit": limit})
+
+
+@mcp.tool()
+async def list_tenders(
+    status: str | None = None,
+    region: str | None = None,
+    limit: int = 20,
+) -> list | dict:
+    """Liste les appels d'offres BTP enregistrés dans le cockpit, avec filtres optionnels.
+
+    Utiliser cet outil pour parcourir l'ensemble du pipeline d'appels d'offres :
+    nouvelles offres (new), en cours d'analyse (analyzing), avec réponse soumise
+    (responded), ou ignorées (ignored).
+
+    Paramètres :
+    - status : filtrer par statut parmi "new", "seen", "analyzing", "responded",
+      "ignored" (optionnel).
+    - region : filtrer par région DOM ex. "Martinique", "Guadeloupe", "La Réunion"
+      (optionnel).
+    - limit : nombre maximum d'offres retournées (défaut 20, max 100).
+    """
+    return await _request(
+        "GET",
+        "/tenders",
+        params={"status": status, "region": region, "limit": limit},
+    )
+
+
+@mcp.tool()
+async def get_tender(tender_id: str) -> dict:
+    """Récupère le détail complet d'un appel d'offres par son UUID.
+
+    Utiliser cet outil pour inspecter une offre précise avant de lancer son
+    analyse : titre, résumé, lots, organisation, localisation, date limite,
+    score de pertinence, mots-clés appariés, et lien vers le document d'analyse
+    s'il a déjà été produit (document_id).
+
+    Paramètre :
+    - tender_id : UUID de l'appel d'offres.
+    """
+    return await _request("GET", f"/tenders/{tender_id}")
+
+
+@mcp.tool()
+async def analyze_tender_offer(
+    tender_id: str,
+    instruction: str | None = None,
+) -> dict:
+    """Lance l'analyse IA d'un appel d'offres BTP et génère un document d'analyse structuré.
+
+    Utiliser cet outil pour demander au cockpit une analyse complète d'une offre :
+    synthèse exécutive, décomposition des lots, pièces à fournir, critères de
+    sélection, délais, contraintes DOM, risques identifiés et recommandation finale.
+
+    Le backend crée un Document de type "analyse_ao" (statut draft), met à jour
+    l'offre en statut "responded", et retourne le document créé. Ce document peut
+    ensuite être soumis à validation via list_approvals / accept_approval.
+
+    Paramètres :
+    - tender_id  : UUID de l'appel d'offres à analyser (obligatoire).
+    - instruction : consigne complémentaire pour orienter l'analyse, ex.
+      "Insiste sur les risques liés au transport maritime interîles" (optionnel).
+    """
+    body: dict[str, Any] = {}
+    if instruction is not None:
+        body["instruction"] = instruction
+    return await _request("POST", f"/tenders/{tender_id}/analyze", json=body)
+
+
+# ---------------------------------------------------------------------------
+# Outils — Veille automatique (configuration et déclenchement)
+# ---------------------------------------------------------------------------
+@mcp.tool()
+async def run_veille_now() -> dict:
+    """Déclenche immédiatement un cycle de veille BTP et retourne les offres trouvées.
+
+    Utiliser cet outil pour forcer une recherche manuelle d'appels d'offres sans
+    attendre le prochain cycle planifié. La veille interroge les sources configurées
+    (Perplexity, browser_use), déduplique les résultats et insère les nouvelles
+    offres en base avec le statut "new".
+
+    Retourne {"count": n, "new_ids": ["uuid1", ...]} indiquant le nombre d'offres
+    nouvellement insérées et leurs identifiants. Après exécution, utiliser
+    list_new_offers pour consulter les offres récupérées.
+    """
+    return await _request("POST", "/veille/run")
+
+
+@mcp.tool()
+async def get_veille_config() -> dict:
+    """Récupère la configuration actuelle de la veille automatique BTP.
+
+    Utiliser cet outil pour connaître l'état de la veille planifiée : si elle
+    est activée, l'intervalle entre les cycles (en minutes), la fenêtre de
+    silence (quiet_start/quiet_end en heures), les mots-clés surveillés, les
+    régions DOM ciblées, les sources interrogées (perplexity, browser_use),
+    ainsi que les informations sur le dernier et le prochain cycle.
+    """
+    return await _request("GET", "/veille/config")
+
+
+@mcp.tool()
+async def set_veille_config(
+    enabled: bool | None = None,
+    interval_minutes: int | None = None,
+    quiet_start: int | None = None,
+    quiet_end: int | None = None,
+) -> dict:
+    """Met à jour la configuration de la veille automatique BTP (champs non-None uniquement).
+
+    Utiliser cet outil pour activer ou désactiver la veille planifiée, ajuster
+    sa fréquence, ou définir une fenêtre de silence pendant laquelle aucun cycle
+    ne se déclenche (ex. quiet_start=22, quiet_end=6 pour ne pas chercher la nuit).
+
+    Pour modifier les mots-clés, les régions ou les sources, utiliser directement
+    l'API REST PUT /veille/config avec le champ correspondant.
+
+    Seuls les paramètres fournis (non-None) sont transmis au backend.
+
+    Paramètres :
+    - enabled         : True pour activer la veille planifiée, False pour la mettre
+                        en pause (optionnel).
+    - interval_minutes: intervalle entre deux cycles en minutes, ex. 120 pour
+                        toutes les 2 heures (optionnel).
+    - quiet_start     : heure de début de la fenêtre de silence (0-23, inclusif),
+                        ex. 22 pour commencer à 22h (optionnel).
+    - quiet_end       : heure de fin de la fenêtre de silence (0-23, inclusif),
+                        ex. 6 pour reprendre à 6h du matin (optionnel).
+    """
+    body: dict[str, Any] = {}
+    if enabled is not None:
+        body["enabled"] = enabled
+    if interval_minutes is not None:
+        body["interval_minutes"] = interval_minutes
+    if quiet_start is not None:
+        body["quiet_start"] = quiet_start
+    if quiet_end is not None:
+        body["quiet_end"] = quiet_end
+    return await _request("PUT", "/veille/config", json=body)
 
 
 # ---------------------------------------------------------------------------

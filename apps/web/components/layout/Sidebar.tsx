@@ -10,6 +10,7 @@ import {
   ListChecks,
   ShieldCheck,
   FileText,
+  ClipboardList,
   ListTree,
   Settings,
   LogOut,
@@ -34,6 +35,7 @@ const NAV: NavItem[] = [
   { href: "/tasks", label: "Tâches", icon: ListChecks },
   { href: "/approvals", label: "Validations", icon: ShieldCheck },
   { href: "/documents", label: "Documents", icon: FileText },
+  { href: "/tenders", label: "Appels d'offres", icon: ClipboardList },
   { href: "/logs", label: "Logs", icon: ListTree },
   { href: "/settings", label: "Paramètres", icon: Settings },
 ];

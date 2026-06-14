@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  BookMarked,
+  BookOpen,
   Braces,
   Camera,
   ChevronRight,
@@ -10,8 +12,11 @@ import {
   Edit3,
   Eye,
   FileSearch,
+  FileSpreadsheet,
   FileText,
+  FolderOpen,
   Inbox,
+  Microscope,
   Receipt,
   RefreshCw,
   type LucideIcon,
@@ -53,13 +58,30 @@ const EDITABLE_STATUSES = new Set<DocumentStatus>([
 // Métier label + pictogram per document_type produced by the agents.
 const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
   quote: { label: "Devis", icon: Receipt },
+  dpgf: { label: "DPGF", icon: FileSpreadsheet },
   tender_response: { label: "Réponse appel d'offre", icon: FileSearch },
+  analyse_ao: { label: "Analyse AO", icon: Microscope },
   site_report: { label: "Compte-rendu de chantier", icon: ClipboardList },
+  rapport_chantier: { label: "Rapport de chantier", icon: ClipboardList },
   photo_report: { label: "Rapport d'analyse photo", icon: Camera },
+  dce: { label: "DCE", icon: FolderOpen },
+  cctp: { label: "CCTP", icon: BookOpen },
+  ccap: { label: "CCAP", icon: BookMarked },
 };
 
 // Stable métier ordering for the type filter tabs.
-const TYPE_ORDER = ["quote", "tender_response", "site_report", "photo_report"];
+const TYPE_ORDER = [
+  "quote",
+  "dpgf",
+  "tender_response",
+  "analyse_ao",
+  "site_report",
+  "rapport_chantier",
+  "photo_report",
+  "dce",
+  "cctp",
+  "ccap",
+];
 
 function typeLabel(documentType: string): string {
   return TYPE_META[documentType]?.label ?? documentType;
@@ -652,14 +674,14 @@ function DocumentDetail({
         {/* export buttons */}
         <ExportBar
           documentId={doc.id}
-          showXlsx={doc.document_type === "quote"}
+          showXlsx={doc.document_type === "quote" || doc.document_type === "dpgf"}
         />
       </div>
 
       {/* body */}
       <div className="px-4 py-4">
         {mode === "edit" && canEdit ? (
-          doc.document_type === "quote" ? (
+          doc.document_type === "quote" || doc.document_type === "dpgf" ? (
             <QuoteEditor doc={doc} onSaved={handleSaved} />
           ) : (
             <ReportEditor doc={doc} onSaved={handleSaved} />
@@ -737,13 +759,17 @@ function DocumentContent({
 
   switch (documentType) {
     case "quote":
+    case "dpgf":
       return <QuoteContent content={content} />;
     case "tender_response":
       return <TenderContent content={content} />;
     case "site_report":
+    case "rapport_chantier":
       return <SiteReportContent content={content} />;
     case "photo_report":
       return <PhotoReportContent content={content} />;
+    case "analyse_ao":
+      return <AoAnalysisContent content={content} />;
     default:
       return <JsonContent content={content} />;
   }
@@ -1002,6 +1028,54 @@ function PhotoReportContent({ content }: { content: JsonObject }) {
       <Section label="Points d'attention">
         <BulletList items={points} tone="hot" />
       </Section>
+    </div>
+  );
+}
+
+/* ----- analyse AO: synthèse / lots / pièces / critères / délais / contraintes DOM / risques / recommandation ----- */
+
+function AoAnalysisContent({ content }: { content: JsonObject }) {
+  const synthese = asString(content.synthese).trim();
+  const lots = asStringList(content.lots);
+  const pieces = asStringList(content.pieces_demandees);
+  const criteres = asStringList(content.criteres);
+  const delais = asString(content.delais).trim();
+  const contraintesDom = asStringList(content.contraintes_dom);
+  const risques = asStringList(content.risques);
+  const recommandation = asString(content.recommandation).trim();
+
+  return (
+    <div className="flex flex-col gap-4">
+      {synthese && (
+        <Section label="Synthèse">
+          <p className="text-[12.5px] leading-relaxed text-text2">{synthese}</p>
+        </Section>
+      )}
+      <Section label="Lots">
+        <BulletList items={lots} />
+      </Section>
+      <Section label="Pièces à remettre">
+        <BulletList items={pieces} />
+      </Section>
+      <Section label="Critères de sélection">
+        <BulletList items={criteres} />
+      </Section>
+      <Section label="Délais">
+        <p className="text-[12.5px] leading-relaxed text-text2">
+          {delais || "Non précisé"}
+        </p>
+      </Section>
+      <Section label="Contraintes DOM">
+        <BulletList items={contraintesDom} tone="hot" />
+      </Section>
+      <Section label="Risques identifiés">
+        <BulletList items={risques} tone="hot" />
+      </Section>
+      {recommandation && (
+        <Section label="Recommandation">
+          <p className="text-[12.5px] leading-relaxed text-text2">{recommandation}</p>
+        </Section>
+      )}
     </div>
   );
 }

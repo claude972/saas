@@ -32,6 +32,8 @@ from routes.projects import router as projects_router
 from routes.settings import router as settings_router
 from routes.skills import router as skills_router
 from routes.tasks import router as tasks_router
+from routes.tenders import router as tenders_router
+from routes.veille import router as veille_router
 
 logger = logging.getLogger("openclaw.api")
 
@@ -52,6 +54,26 @@ async def lifespan(app: FastAPI):
         await conn.execute(
             text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS model VARCHAR(255)")
         )
+        # veille_config: columns added after the table's first deploy
+        # (model/prompt/timezone are configurable from the cockpit).
+        await conn.execute(
+            text(
+                "ALTER TABLE veille_config ADD COLUMN IF NOT EXISTS "
+                "timezone VARCHAR(64) NOT NULL DEFAULT 'America/Martinique'"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE veille_config ADD COLUMN IF NOT EXISTS "
+                "perplexity_model VARCHAR(100) NOT NULL DEFAULT 'sonar'"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE veille_config ADD COLUMN IF NOT EXISTS "
+                "search_prompt TEXT"
+            )
+        )
 
     # 3. Seed agents only when the agents table is empty.
     try:
@@ -65,7 +87,24 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001 - never let seeding crash startup
         logger.exception("Agent seeding failed; continuing without seed.")
 
-    yield
+    # 4. Start the veille background scheduler.
+    try:
+        from services.veille_scheduler import scheduler
+
+        await scheduler.start()
+    except Exception:  # noqa: BLE001 - never let the scheduler crash startup
+        logger.exception("VeilleScheduler failed to start; continuing without it.")
+
+    try:
+        yield
+    finally:
+        # 5. Stop the veille scheduler on shutdown.
+        try:
+            from services.veille_scheduler import scheduler
+
+            await scheduler.stop()
+        except Exception:  # noqa: BLE001
+            logger.exception("VeilleScheduler failed to stop cleanly.")
 
 
 app = FastAPI(title="BTP OpenClaw Cockpit API", lifespan=lifespan)
@@ -89,6 +128,8 @@ app.include_router(documents_router, prefix="/documents", tags=["documents"])
 app.include_router(logs_router, prefix="/logs", tags=["logs"])
 app.include_router(skills_router, prefix="/skills", tags=["skills"])
 app.include_router(settings_router, prefix="/settings", tags=["settings"])
+app.include_router(tenders_router, prefix="/tenders", tags=["tenders"])
+app.include_router(veille_router, prefix="/veille", tags=["veille"])
 
 
 @app.get("/health")

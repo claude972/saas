@@ -22,16 +22,21 @@ import type {
   SkillCreateInput,
   SkillUpdateInput,
   Task,
+  TenderAnalyzeResult,
+  TenderOffer,
+  TenderOfferUpdateInput,
   UpdateAgentInput,
   UpdateDocumentInput,
   UpdateProjectInput,
   UpdateTaskInput,
+  VeilleConfig,
+  VeilleConfigUpdateInput,
 } from "@/lib/types";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 interface RequestOptions {
   method?: Method;
@@ -283,6 +288,113 @@ export const api = {
   // ---------- OpenClaw status ----------
   getOpenclawStatus(): Promise<OpenClawStatus> {
     return request<OpenClawStatus>("/openclaw/status");
+  },
+
+  // ---------- Tenders / Veille ----------
+
+  /**
+   * Liste les appels d'offres avec filtres optionnels.
+   */
+  listTenders(params?: {
+    status?: string;
+    region?: string;
+    source?: string;
+    limit?: number;
+  }): Promise<TenderOffer[]> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.region) qs.set("region", params.region);
+    if (params?.source) qs.set("source", params.source);
+    if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+    const query = qs.toString();
+    return request<TenderOffer[]>(`/tenders${query ? `?${query}` : ""}`);
+  },
+
+  /**
+   * Retourne uniquement les offres au statut "new".
+   */
+  listNewTenders(limit?: number): Promise<TenderOffer[]> {
+    const qs = limit !== undefined ? `?limit=${limit}` : "";
+    return request<TenderOffer[]>(`/tenders/new${qs}`);
+  },
+
+  /**
+   * Récupère une offre par son identifiant.
+   */
+  getTender(id: string): Promise<TenderOffer> {
+    return request<TenderOffer>(`/tenders/${id}`);
+  },
+
+  /**
+   * Crée une offre manuelle.
+   */
+  createTender(input: {
+    title: string;
+    source?: string;
+    organization?: string | null;
+    summary?: string | null;
+    location?: string | null;
+    region?: string | null;
+    url?: string | null;
+    lots?: unknown[] | null;
+    deadline?: string | null;
+    raw?: Record<string, unknown> | null;
+    score?: number | null;
+  }): Promise<TenderOffer> {
+    return request<TenderOffer>("/tenders", { method: "POST", body: input });
+  },
+
+  /**
+   * Met à jour partiellement une offre (statut, score, etc.).
+   */
+  updateTender(id: string, input: TenderOfferUpdateInput): Promise<TenderOffer> {
+    return request<TenderOffer>(`/tenders/${id}`, {
+      method: "PATCH",
+      body: input,
+    });
+  },
+
+  /**
+   * Supprime une offre (204 No Content).
+   */
+  deleteTender(id: string): Promise<void> {
+    return request<void>(`/tenders/${id}`, { method: "DELETE" });
+  },
+
+  /**
+   * Lance l'analyse IA d'une offre et retourne le document généré (analyse_ao).
+   */
+  analyzeTender(id: string, instruction?: string): Promise<TenderAnalyzeResult> {
+    return request<TenderAnalyzeResult>(`/tenders/${id}/analyze`, {
+      method: "POST",
+      body: instruction ? { instruction } : {},
+    });
+  },
+
+  /**
+   * Déclenche immédiatement un cycle de veille AO.
+   */
+  runVeille(): Promise<{ count: number; new_ids: string[] }> {
+    return request<{ count: number; new_ids: string[] }>("/veille/run", {
+      method: "POST",
+    });
+  },
+
+  /**
+   * Récupère la configuration de la veille automatique.
+   */
+  getVeilleConfig(): Promise<VeilleConfig> {
+    return request<VeilleConfig>("/veille/config");
+  },
+
+  /**
+   * Met à jour la configuration de la veille automatique.
+   */
+  updateVeilleConfig(input: VeilleConfigUpdateInput): Promise<VeilleConfig> {
+    return request<VeilleConfig>("/veille/config", {
+      method: "PUT",
+      body: input,
+    });
   },
 };
 

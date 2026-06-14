@@ -9,6 +9,7 @@ import {
   Check,
   Cpu,
   Database,
+  Eye,
   FileText,
   Gauge,
   KeyRound,
@@ -40,6 +41,7 @@ import { Panel } from "@/components/ui/Panel";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/cn";
+import { VeilleSettingsCard } from "@/components/veille/VeilleSettingsCard";
 
 /* /health is a public endpoint and is NOT part of lib/api (which exposes only
    the documented entity methods), so we probe it directly against the same
@@ -230,6 +232,22 @@ export default function SettingsPage() {
               }
             />
             <PreferencesPanel />
+          </section>
+
+          {/* veille appels d'offres */}
+          <section className="oc-fade" style={{ animationDelay: "0.24s" }}>
+            <SectionHeader
+              title="Veille appels d'offres"
+              icon={
+                <Eye
+                  size={16}
+                  strokeWidth={2}
+                  className="text-text2"
+                  aria-hidden
+                />
+              }
+            />
+            <VeilleSettingsCard />
           </section>
         </>
       )}

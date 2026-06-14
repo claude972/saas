@@ -337,3 +337,94 @@ export interface UpdateDocumentInput {
 }
 
 export type ExportFormat = "pdf" | "docx" | "xlsx";
+
+// ---------- Veille AO — enums ----------
+
+export type TenderStatus =
+  | "new"
+  | "seen"
+  | "analyzing"
+  | "responded"
+  | "ignored";
+
+export type TenderSource =
+  | "perplexity"
+  | "browser_use"
+  | "official"
+  | "manual";
+
+// ---------- Veille AO — entities ----------
+
+export interface TenderOffer {
+  id: string;
+  title: string;
+  source: TenderSource | string;
+  organization?: string | null;
+  summary?: string | null;
+  lots?: JsonValue | null;
+  location?: string | null;
+  region?: string | null;
+  deadline?: string | null;
+  url?: string | null;
+  status: TenderStatus | string;
+  score?: number | null;
+  keywords_matched?: string[] | null;
+  raw?: JsonObject | null;
+  dedup_key?: string | null;
+  document_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VeilleConfig {
+  id: string;
+  enabled: boolean;
+  interval_minutes: number;
+  quiet_start?: number | null;
+  quiet_end?: number | null;
+  timezone: string;
+  keywords?: string[] | null;
+  regions?: string[] | null;
+  sources?: string[] | null;
+  perplexity_model: string;
+  search_prompt?: string | null;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  last_status?: string | null;
+  last_error?: string | null;
+  last_count?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------- Veille AO — request bodies ----------
+
+export interface TenderOfferUpdateInput {
+  title?: string;
+  source?: TenderSource | string;
+  organization?: string | null;
+  summary?: string | null;
+  lots?: JsonValue | null;
+  location?: string | null;
+  region?: string | null;
+  deadline?: string | null;
+  url?: string | null;
+  status?: TenderStatus | string;
+  score?: number | null;
+}
+
+export interface VeilleConfigUpdateInput {
+  enabled?: boolean;
+  interval_minutes?: number;
+  quiet_start?: number | null;
+  quiet_end?: number | null;
+  timezone?: string;
+  keywords?: string[] | null;
+  regions?: string[] | null;
+  sources?: string[] | null;
+  perplexity_model?: string;
+  search_prompt?: string | null;
+}
+
+// TenderAnalyzeResult is the AppDocument returned by POST /tenders/{id}/analyze.
+export type TenderAnalyzeResult = AppDocument;

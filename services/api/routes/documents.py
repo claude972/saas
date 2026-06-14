@@ -165,9 +165,9 @@ async def update_document(
     Rules
     -----
     * ``title`` and ``status`` are applied as-is.
-    * ``content`` is applied and — when ``document_type == "quote"`` — totals
-      (``total_ht``, ``total_tva``, ``total_ttc``) are recomputed from the line
-      items.
+    * ``content`` is applied and — when ``document_type`` is ``"quote"`` or
+      ``"dpgf"`` — totals (``total_ht``, ``total_tva``, ``total_ttc``) are
+      recomputed from the line items.
     * If the document was previously ``approved`` or ``sent`` and ``content`` is
       being changed, the document is demoted to ``waiting_approval`` and a new
       :class:`~models.Approval` is created so a human can re-validate.
@@ -189,7 +189,7 @@ async def update_document(
     # --- Apply and optionally recalculate content ---
     if content_changed:
         new_content: dict = update_data["content"]
-        if document.document_type == "quote":
+        if document.document_type in ("quote", "dpgf"):
             new_content = _recalculate_quote_totals(new_content)
         document.content = new_content
 

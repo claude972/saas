@@ -43,6 +43,23 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DEFAULT_LLM_PROVIDER: str = "anthropic"
 
+    # Perplexity (veille appels d'offres). Empty string => provider unavailable.
+    PERPLEXITY_API_KEY: str = ""
+    PERPLEXITY_MODEL: str = "sonar"
+
+    # Supabase storage. Empty strings => fallback local filesystem.
+    SUPABASE_URL: str = ""
+    SUPABASE_SERVICE_KEY: str = ""
+    SUPABASE_BUCKET: str = "documents"
+
+    # Browser-use scraping (optional heavy dependency). Disabled by default.
+    BROWSER_USE_ENABLED: bool = False
+
+    # Secret partagé pour POST /veille/tick (cron externe).
+    # Doit être une chaîne non vide en production pour que le tick soit accepté.
+    # Laissé vide par défaut pour le développement local (endpoint refusé si vide).
+    VEILLE_TICK_SECRET: str = ""
+
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
     def _async_dsn(cls, v: str) -> str:

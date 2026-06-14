@@ -1,0 +1,14 @@
+# Dépendances OPTIONNELLES pour la veille avec navigation browser-use.
+#
+# Ces paquets ne sont PAS installés par défaut (ils sont trop lourds pour le
+# build Railway et ne sont pas requis pour démarrer l'API).
+#
+# Installation manuelle pour activer la navigation browser-use :
+#   pip install -r requirements-veille.txt
+#   playwright install chromium
+#
+# Une fois installés, activez la fonctionnalité via la variable d'environnement :
+#   BROWSER_USE_ENABLED=true
+#
+browser-use
+playwright

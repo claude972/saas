@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from enums import (
     ApprovalStatus,
@@ -406,3 +406,159 @@ class OpenClawStatus(BaseModel):
     connected: bool
     last_seen: datetime | None = None
     model_info: dict | None = None
+
+
+# ---------------------------------------------------------------------------
+# TenderOffer (Veille AO)
+# ---------------------------------------------------------------------------
+
+def _validate_tender_url(v: str | None) -> str | None:
+    """Valide qu'une URL d'offre est de schéma http ou https.
+
+    Rejette silencieusement (retourne ``None``) toute valeur qui ne commence
+    pas par ``http://`` ou ``https://``, évitant ainsi d'exposer des URLs
+    ``javascript:``, ``data:`` ou ``vbscript:`` comme liens cliquables dans
+    le frontend (XSS stocké) ou de transmettre des hôtes internes à
+    browser-use (SSRF).
+    """
+    if v is None:
+        return None
+    stripped = v.strip()
+    if not stripped:
+        return None
+    lower = stripped.lower()
+    if lower.startswith("http://") or lower.startswith("https://"):
+        return stripped
+    return None
+
+
+class TenderOfferCreate(BaseModel):
+    title: str
+    source: str = "manual"
+    organization: str | None = None
+    summary: str | None = None
+    location: str | None = None
+    region: str | None = None
+    url: str | None = None
+    lots: list | None = None
+    deadline: datetime | None = None
+    raw: dict | None = None
+    score: float | None = None
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def _check_url(cls, v: object) -> str | None:
+        """N'accepte que les URLs http/https (rejette javascript:, data:, etc.)."""
+        return _validate_tender_url(str(v) if v is not None else None)
+
+
+class TenderOfferUpdate(BaseModel):
+    title: str | None = None
+    source: str | None = None
+    organization: str | None = None
+    summary: str | None = None
+    location: str | None = None
+    region: str | None = None
+    url: str | None = None
+    lots: list | None = None
+    deadline: datetime | None = None
+    status: str | None = None
+    score: float | None = None
+    keywords_matched: list | None = None
+    raw: dict | None = None
+    document_id: uuid.UUID | None = None
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def _check_url(cls, v: object) -> str | None:
+        """N'accepte que les URLs http/https (rejette javascript:, data:, etc.)."""
+        return _validate_tender_url(str(v) if v is not None else None)
+
+
+class TenderOfferRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    source: str
+    organization: str | None = None
+    summary: str | None = None
+    lots: list | None = None
+    location: str | None = None
+    region: str | None = None
+    deadline: datetime | None = None
+    url: str | None = None
+    status: str
+    score: float | None = None
+    keywords_matched: list | None = None
+    raw: dict | None = None
+    dedup_key: str | None = None
+    document_id: uuid.UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# VeilleConfig (singleton de configuration de la veille AO)
+# ---------------------------------------------------------------------------
+class VeilleConfigUpdate(BaseModel):
+    # Bornes de sécurité : interval_minutes >= 15 min (l'API Perplexity est
+    # payante — empêche une veille en boucle quasi-continue) et <= 7 jours ;
+    # les heures de silence restent dans 0..23 ; les listes sont plafonnées
+    # pour borner la taille du prompt envoyé au LLM.
+    enabled: bool | None = None
+    interval_minutes: int | None = Field(default=None, ge=15, le=10080)
+    quiet_start: int | None = Field(default=None, ge=0, le=23)
+    quiet_end: int | None = Field(default=None, ge=0, le=23)
+    keywords: list | None = Field(default=None, max_length=50)
+    regions: list | None = Field(default=None, max_length=50)
+    sources: list | None = Field(default=None, max_length=10)
+    perplexity_model: str | None = Field(default=None, max_length=100)
+    search_prompt: str | None = Field(default=None, max_length=4000)
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def _check_timezone(cls, v: str | None) -> str | None:
+        """Refuse un fuseau IANA inconnu (sinon quiet hours seraient ignorées)."""
+        if v is None:
+            return None
+        try:
+            from zoneinfo import ZoneInfo
+
+            ZoneInfo(v)
+        except Exception as exc:  # ZoneInfoNotFoundError, etc.
+            raise ValueError(f"Fuseau horaire invalide : {v!r}") from exc
+        return v
+
+
+class VeilleConfigRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    enabled: bool
+    interval_minutes: int
+    quiet_start: int | None = None
+    quiet_end: int | None = None
+    timezone: str = "America/Martinique"
+    keywords: list | None = None
+    regions: list | None = None
+    sources: list | None = None
+    perplexity_model: str = "sonar"
+    search_prompt: str | None = None
+    last_run_at: datetime | None = None
+    next_run_at: datetime | None = None
+    last_status: str | None = None
+    last_error: str | None = None
+    last_count: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# TenderAnalyzeRequest (body de POST /{tender_id}/analyze)
+# ---------------------------------------------------------------------------
+class TenderAnalyzeRequest(BaseModel):
+    instruction: str | None = None
+    provider: str | None = None
+    model: str | None = None

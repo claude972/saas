@@ -58,3 +58,30 @@ class LLMProvider(str, Enum):
 class SkillSource(str, Enum):
     MAISON = "maison"
     ANTHROPIC = "anthropic"
+
+
+class TenderStatus(str, Enum):
+    NEW = "new"
+    SEEN = "seen"
+    ANALYZING = "analyzing"
+    RESPONDED = "responded"
+    IGNORED = "ignored"
+
+
+class TenderSource(str, Enum):
+    PERPLEXITY = "perplexity"
+    BROWSER_USE = "browser_use"
+    OFFICIAL = "official"
+    MANUAL = "manual"
+
+
+class DocumentType(str, Enum):
+    QUOTE = "quote"
+    SITE_REPORT = "site_report"
+    TENDER_RESPONSE = "tender_response"
+    RAPPORT_CHANTIER = "rapport_chantier"
+    ANALYSE_AO = "analyse_ao"
+    DPGF = "dpgf"
+    DCE = "dce"
+    CCTP = "cctp"
+    CCAP = "ccap"

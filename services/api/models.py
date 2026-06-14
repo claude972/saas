@@ -23,7 +23,9 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
+    Integer,
     String,
     Text,
     func,
@@ -433,6 +435,125 @@ class SystemState(Base):
 
     key: Mapped[str] = mapped_column(String(255), primary_key=True)
     value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class TenderOffer(Base):
+    """Appels d'offres BTP détectés par la veille ou saisis manuellement.
+
+    Chaque ligne correspond à un marché public potentiel.  La colonne
+    ``dedup_key`` (hash stable url|title) garantit l'unicité et évite
+    les doublons lors des passes de veille successives.
+    """
+
+    __tablename__ = "tender_offers"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="manual", index=True
+    )
+    organization: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lots: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    region: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="new", index=True
+    )
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    keywords_matched: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    dedup_key: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, unique=True, index=True
+    )
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class VeilleConfig(Base):
+    """Configuration singleton de la veille automatique des appels d'offres.
+
+    Une seule ligne est attendue, toujours lue via ``SELECT … LIMIT 1`` ou
+    créée à la demande par ``get_or_create_config``.
+    """
+
+    __tablename__ = "veille_config"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    interval_minutes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=180, server_default="180"
+    )
+    quiet_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quiet_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # IANA timezone (ex: "America/Martinique") dans lequel quiet_start/quiet_end
+    # sont interprétés. Défaut Martinique (UTC-4) pour les DOM.
+    timezone: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="America/Martinique",
+        server_default="America/Martinique",
+    )
+    keywords: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    regions: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    sources: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Modèle Perplexity utilisé pour la recherche (sonar, sonar-pro, …),
+    # réglable depuis le cockpit.
+    perplexity_model: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        default="sonar",
+        server_default="sonar",
+    )
+    # Gabarit de prompt personnalisé éditable depuis le cockpit. None => le
+    # prompt par défaut intégré à services.perplexity est utilisé. Les variables
+    # {keywords}, {regions} et {limit} y sont substituées.
+    search_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    next_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
