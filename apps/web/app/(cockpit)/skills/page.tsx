@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -498,6 +499,9 @@ export default function SkillsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const busyRef = useRef<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     const data = await api.listSkills();
@@ -639,6 +643,30 @@ export default function SkillsPage() {
     }
   }
 
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Reset input so selecting the same file again re-triggers onChange.
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setImportError(null);
+    try {
+      const imported = await api.importSkill(file);
+      setSkills((prev) => {
+        if (!prev) return [imported];
+        const exists = prev.findIndex((s) => s.id === imported.id);
+        if (exists >= 0) {
+          return prev.map((s) => (s.id === imported.id ? imported : s));
+        }
+        return [imported, ...prev];
+      });
+    } catch (err: unknown) {
+      setImportError(err instanceof Error ? err.message : "Import impossible.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const enabled = skills?.filter((s) => s.enabled).length ?? 0;
   const total = skills?.length ?? 0;
 
@@ -655,15 +683,55 @@ export default function SkillsPage() {
             Anthropic.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="disp flex items-center gap-2 rounded-[9px] bg-amber px-4 py-2 text-[12.5px] font-semibold tracking-[0.04em] text-bg transition-opacity hover:opacity-90"
-        >
-          <Plus size={15} strokeWidth={2.5} aria-hidden />
-          Nouveau skill
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Hidden file input for .skill / .md / .zip */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".skill,.md,.zip"
+            className="hidden"
+            aria-label="Importer un fichier skill"
+            onChange={handleImport}
+          />
+          <button
+            type="button"
+            disabled={importing}
+            onClick={() => fileInputRef.current?.click()}
+            className="disp flex items-center gap-2 rounded-[9px] border border-line bg-bg-2 px-4 py-2 text-[12.5px] font-semibold tracking-[0.04em] text-text2 transition-colors hover:border-amber-line hover:text-text disabled:opacity-50"
+          >
+            {importing ? (
+              <Spinner size={14} />
+            ) : (
+              <Upload size={14} strokeWidth={2.2} aria-hidden />
+            )}
+            Importer un skill (.skill)
+          </button>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="disp flex items-center gap-2 rounded-[9px] bg-amber px-4 py-2 text-[12.5px] font-semibold tracking-[0.04em] text-bg transition-opacity hover:opacity-90"
+          >
+            <Plus size={15} strokeWidth={2.5} aria-hidden />
+            Nouveau skill
+          </button>
+        </div>
       </header>
+
+      {/* Import error banner */}
+      {importError && (
+        <div className="oc-fade flex items-start gap-2 rounded-[8px] border border-stop-bg bg-stop-bg px-3 py-2.5 text-[12px] text-stop">
+          <AlertTriangle size={14} strokeWidth={2.2} className="mt-px flex-none" aria-hidden />
+          <span className="flex-1">{importError}</span>
+          <button
+            type="button"
+            onClick={() => setImportError(null)}
+            aria-label="Fermer"
+            className="grid h-5 w-5 flex-none place-items-center rounded-[4px] opacity-70 transition-opacity hover:opacity-100"
+          >
+            <X size={12} strokeWidth={2.5} aria-hidden />
+          </button>
+        </div>
+      )}
 
       {/* Summary strip */}
       {skills !== null && (

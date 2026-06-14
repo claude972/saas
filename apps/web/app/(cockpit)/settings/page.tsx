@@ -495,12 +495,14 @@ const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   google: "Google",
+  deepseek: "DeepSeek",
 };
 
 const PROVIDER_MODELS: Record<string, string> = {
   anthropic: "claude-opus-4.8",
   openai: "GPT-4o",
   google: "Gemini 1.5 Pro",
+  deepseek: "deepseek-chat",
 };
 
 function LLMConfigPanel() {
@@ -601,7 +603,7 @@ function LLMConfigPanel() {
 
       <div className="border-t border-line-soft px-3.5 py-2.5">
         <span className="mono text-[10.5px] text-text3">
-          Configurez les clés via les variables d&apos;environnement backend (ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY).
+          Configurez les clés via les variables d&apos;environnement backend (ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, DEEPSEEK_API_KEY).
         </span>
       </div>
     </Panel>

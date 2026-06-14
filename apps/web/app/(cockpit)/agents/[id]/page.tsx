@@ -27,6 +27,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { Spinner } from "@/components/ui/Spinner";
+import { ModelSelector } from "@/components/agents/ModelSelector";
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                              */
@@ -557,6 +558,7 @@ function EditPanel({
 
   const providerInfo = llmConfig?.providers.find((p) => p.name === provider);
   const modelPlaceholder = providerInfo?.default_model ?? "défaut du fournisseur";
+  const providerModels = providerInfo?.models ?? [];
 
   function toggleSkill(slug: string) {
     setSelectedSlugs((prev) =>
@@ -676,7 +678,10 @@ function EditPanel({
           <Field label="Fournisseur LLM">
             <select
               value={provider}
-              onChange={(e) => setProvider(e.target.value)}
+              onChange={(e) => {
+                setProvider(e.target.value);
+                setModel("");
+              }}
               className={INPUT_CLS}
             >
               {llmConfig ? (
@@ -691,17 +696,18 @@ function EditPanel({
                   <option value="anthropic">anthropic</option>
                   <option value="openai">openai</option>
                   <option value="google">google</option>
+                  <option value="deepseek">deepseek</option>
                 </>
               )}
             </select>
           </Field>
           <Field label={`Modèle (vide = ${modelPlaceholder})`}>
-            <input
-              type="text"
+            <ModelSelector
+              models={providerModels}
               value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className={INPUT_CLS}
+              onChange={setModel}
               placeholder={modelPlaceholder}
+              className={INPUT_CLS}
             />
           </Field>
         </div>

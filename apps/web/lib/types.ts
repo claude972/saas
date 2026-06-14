@@ -298,6 +298,7 @@ export interface LLMProviderInfo {
   name: LLMProvider | string;
   available: boolean;
   default_model: string;
+  models: string[];
 }
 
 export interface LLMConfig {

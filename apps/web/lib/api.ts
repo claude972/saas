@@ -183,6 +183,34 @@ export const api = {
   deleteSkill(id: string): Promise<void> {
     return request<void>(`/skills/${id}`, { method: "DELETE" });
   },
+  async importSkill(file: File): Promise<Skill> {
+    const form = new FormData();
+    form.append("file", file);
+
+    const headers: Record<string, string> = {};
+    const token = getToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}/skills/import`, {
+        method: "POST",
+        headers,
+        body: form,
+        cache: "no-store",
+      });
+    } catch {
+      throw new Error("Impossible de joindre le backend. Vérifiez qu'il est démarré.");
+    }
+
+    if (!res.ok) {
+      throw new Error(await extractError(res));
+    }
+
+    return JSON.parse(await res.text()) as Skill;
+  },
 
   // ---------- Tasks ----------
   listTasks(): Promise<Task[]> {

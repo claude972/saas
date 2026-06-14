@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends
 
-from agents.llm import _DEFAULT_MODELS, _DEFAULT_PROVIDER, provider_available
+from agents.llm import _DEFAULT_MODELS, _DEFAULT_PROVIDER, models_for, provider_available
 from core.security import get_current_user
 from deps import get_db
 from models import CompanySettings
@@ -89,6 +89,7 @@ async def get_llm_settings(
             "name": name,
             "available": provider_available(name),
             "default_model": _DEFAULT_MODELS.get(name, ""),
+            "models": models_for(name),
         }
         for name in _PROVIDERS
     ]

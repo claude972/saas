@@ -39,6 +39,22 @@ _DEFAULT_MODELS: dict[str, str] = {
 
 _DEFAULT_PROVIDER: str = settings.DEFAULT_LLM_PROVIDER
 
+_PROVIDER_MODELS: dict[str, list[str]] = {
+    "anthropic": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"],
+    "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1", "o1-mini"],
+    "google": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash"],
+    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+}
+
+
+def models_for(provider: str) -> list[str]:
+    """Return the curated model list for *provider*, or [default_model] if unknown."""
+    key = provider.lower()
+    if key in _PROVIDER_MODELS:
+        return _PROVIDER_MODELS[key]
+    default = _DEFAULT_MODELS.get(key, "")
+    return [default] if default else []
+
 # PydanticAI model-string prefixes per provider. Gemini via API key uses the
 # unified "google:" prefix (GoogleModel), which reads GOOGLE_API_KEY from the
 # environment. The legacy "google-gla:" prefix still resolves but is deprecated

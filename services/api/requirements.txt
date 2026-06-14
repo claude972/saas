@@ -14,3 +14,4 @@ google-generativeai
 reportlab
 python-docx
 openpyxl
+pyyaml
