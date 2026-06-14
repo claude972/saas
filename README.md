@@ -7,6 +7,12 @@ choisit un sous-agent via une whitelist, crée une tâche, exécute l'agent (Cla
 documents (toujours en **brouillon**), crée des **validations humaines** pour les actions sensibles,
 et **journalise tout**. OpenClaw n'écrit jamais directement en base ni dans les fichiers.
 
+## Prérequis
+
+- **Python 3.11+** — le backend utilise la syntaxe d'union `X | None` (PEP 604), évaluée à l'exécution par SQLAlchemy ; Python 3.10 est le minimum, 3.11+ recommandé.
+- **Node.js 18+** et **Docker** (PostgreSQL).
+- ⚠️ **Évitez `~/Documents` et `~/Bureau` s'ils sont synchronisés sur iCloud.** Les fichiers déchargés (« Optimiser le stockage du Mac ») provoquent des lectures partielles et des `TimeoutError` à l'exécution. Travaillez dans un dossier local, par ex. `~/dev/saas`.
+
 ## Stack
 
 - **Frontend** — `apps/web` : Next.js 14 (App Router), TypeScript, Tailwind CSS, lucide-react.
