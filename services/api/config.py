@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # LLM — additional providers (Vague 1). Empty string => provider unavailable.
     OPENAI_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
+    DEEPSEEK_API_KEY: str = ""
     DEFAULT_LLM_PROVIDER: str = "anthropic"
 
     @field_validator("DATABASE_URL", mode="after")

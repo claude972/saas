@@ -29,7 +29,7 @@ router = APIRouter()
 # Helpers
 # ---------------------------------------------------------------------------
 
-_PROVIDERS = ("anthropic", "openai", "google")
+_PROVIDERS = ("anthropic", "openai", "google", "deepseek")
 
 
 async def _get_or_create_company(db: AsyncSession) -> CompanySettings:

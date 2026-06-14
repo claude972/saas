@@ -5,8 +5,8 @@ Public API is unchanged from the previous hand-rolled router. Agents call
 error; ``command_router`` calls ``classify_intent_llm``; ``routes/settings``
 calls ``provider_available`` / ``available_providers``.
 
-Three providers are supported: anthropic, openai, google. A provider is
-"available" when its API key (from ``config.settings``) is non-empty.
+Four providers are supported: anthropic, openai, google, deepseek. A provider
+is "available" when its API key (from ``config.settings``) is non-empty.
 ``llm_available()`` returns True when at least one provider has a key.
 
 Strict rule for the Anthropic opus-4-8 model: NEVER send temperature, top_p,
@@ -34,6 +34,7 @@ _DEFAULT_MODELS: dict[str, str] = {
     "anthropic": MODEL,
     "openai": "gpt-4o",
     "google": "gemini-1.5-pro",
+    "deepseek": "deepseek-chat",
 }
 
 _DEFAULT_PROVIDER: str = settings.DEFAULT_LLM_PROVIDER
@@ -41,11 +42,14 @@ _DEFAULT_PROVIDER: str = settings.DEFAULT_LLM_PROVIDER
 # PydanticAI model-string prefixes per provider. Gemini via API key uses the
 # unified "google:" prefix (GoogleModel), which reads GOOGLE_API_KEY from the
 # environment. The legacy "google-gla:" prefix still resolves but is deprecated
-# in PydanticAI 1.x and removed in v2.0, so we use "google:" directly.
+# in PydanticAI 1.x and removed in v2.0, so we use "google:" directly. DeepSeek
+# is OpenAI-compatible and uses the built-in "deepseek:" prefix (DeepSeekProvider,
+# base_url https://api.deepseek.com), which reads DEEPSEEK_API_KEY from the env.
 _PROVIDER_PREFIX: dict[str, str] = {
     "anthropic": "anthropic",
     "openai": "openai",
     "google": "google",
+    "deepseek": "deepseek",
 }
 
 # Provider API keys (from config). Mapping used both for availability checks
@@ -54,6 +58,7 @@ _PROVIDER_KEYS: dict[str, str] = {
     "anthropic": settings.ANTHROPIC_API_KEY,
     "openai": settings.OPENAI_API_KEY,
     "google": settings.GOOGLE_API_KEY,
+    "deepseek": settings.DEEPSEEK_API_KEY,
 }
 
 # PydanticAI reads provider credentials from the environment. Export whatever
@@ -63,6 +68,7 @@ for _env_name, _key in (
     ("ANTHROPIC_API_KEY", _PROVIDER_KEYS["anthropic"]),
     ("OPENAI_API_KEY", _PROVIDER_KEYS["openai"]),
     ("GOOGLE_API_KEY", _PROVIDER_KEYS["google"]),
+    ("DEEPSEEK_API_KEY", _PROVIDER_KEYS["deepseek"]),
 ):
     if _key and not os.getenv(_env_name):
         os.environ[_env_name] = _key
@@ -89,7 +95,11 @@ def provider_available(provider: str) -> bool:
 
 def available_providers() -> list[str]:
     """Return a list of provider names that have a configured API key."""
-    return [p for p in ("anthropic", "openai", "google") if provider_available(p)]
+    return [
+        p
+        for p in ("anthropic", "openai", "google", "deepseek")
+        if provider_available(p)
+    ]
 
 
 def llm_available() -> bool:
@@ -122,7 +132,7 @@ def _resolve_provider_model(
 ) -> tuple[str, str]:
     """Resolve (provider, model), filling in defaults where None is passed."""
     resolved_provider = (provider or _DEFAULT_PROVIDER).lower()
-    if resolved_provider not in ("anthropic", "openai", "google"):
+    if resolved_provider not in ("anthropic", "openai", "google", "deepseek"):
         resolved_provider = "anthropic"
     resolved_model = model or _DEFAULT_MODELS[resolved_provider]
     return resolved_provider, resolved_model
