@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BTP OpenClaw Cockpit — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css" rel="stylesheet" />
+<style>
+:root{
+  --bg:oklch(0.175 0.006 68);
+  --bg-1:oklch(0.205 0.007 68);
+  --bg-2:oklch(0.238 0.008 66);
+  --bg-3:oklch(0.275 0.009 66);
+  --line:oklch(0.34 0.012 66 / .65);
+  --line-soft:oklch(0.32 0.011 66 / .40);
+  --text:oklch(0.935 0.012 80);
+  --text-2:oklch(0.705 0.014 72);
+  --text-3:oklch(0.535 0.014 70);
+  --amber:oklch(0.805 0.155 72);
+  --amber-2:oklch(0.875 0.125 82);
+  --amber-bg:oklch(0.805 0.155 72 / .14);
+  --amber-line:oklch(0.805 0.155 72 / .35);
+  --ok:oklch(0.77 0.14 152);
+  --ok-bg:oklch(0.77 0.14 152 / .14);
+  --hot:oklch(0.70 0.17 44);
+  --hot-bg:oklch(0.70 0.17 44 / .15);
+  --stop:oklch(0.635 0.20 28);
+  --stop-bg:oklch(0.635 0.20 28 / .16);
+  --steel:oklch(0.74 0.06 232);
+  --steel-bg:oklch(0.74 0.06 232 / .14);
+  --r:7px;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --disp:'Saira','IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--text);font-family:var(--sans);
+  font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+.tnum{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono)}
+.disp{font-family:var(--disp)}
+.micro{font-family:var(--disp);font-size:10.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--text-3)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--bg-3);border-radius:6px;border:2px solid var(--bg)}
+::-webkit-scrollbar-track{background:transparent}
+
+.app{display:grid;grid-template-rows:54px 1fr;height:100vh;border-top:2px solid var(--amber)}
+
+/* ===== TOP BAR ===== */
+.topbar{display:flex;align-items:center;gap:18px;padding:0 18px;background:var(--bg-1);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:11px;padding-right:18px;border-right:1px solid var(--line-soft)}
+.mark{width:30px;height:30px;border-radius:8px;background:var(--amber);display:grid;place-items:center;flex:none}
+.mark svg{width:18px;height:18px}
+.brand .name{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.04em;line-height:1}
+.brand .sub{font-family:var(--disp);font-weight:500;font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--text-3);margin-top:3px}
+.topbar .spacer{flex:1}
+.status-readout{display:flex;align-items:center;gap:9px;padding:6px 13px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:20px}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--ok);position:relative;flex:none}
+.pulse::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1.5px solid var(--ok);opacity:.6;animation:ring 2.4s ease-out infinite}
+@keyframes ring{0%{transform:scale(.6);opacity:.7}100%{transform:scale(1.7);opacity:0}}
+.status-readout .lbl{font-family:var(--disp);font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ok)}
+.status-readout .meta{font-family:var(--mono);font-size:11px;color:var(--text-2)}
+.topdiv{width:1px;height:22px;background:var(--line-soft)}
+.tag-int{font-family:var(--disp);font-weight:600;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);border:1px solid var(--steel-bg);background:var(--steel-bg);padding:4px 9px;border-radius:5px}
+.clock{font-family:var(--mono);font-size:12px;color:var(--text-2)}
+.iconbtn{width:32px;height:32px;border-radius:7px;display:grid;place-items:center;color:var(--text-2);background:transparent;border:1px solid transparent;cursor:pointer;font-size:17px;position:relative}
+.iconbtn:hover{background:var(--bg-2);color:var(--text)}
+.dotbadge{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--hot);border:1.5px solid var(--bg-1)}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--bg-3);border:1px solid var(--line);display:grid;place-items:center;font-family:var(--disp);font-weight:600;font-size:12px;color:var(--amber-2)}
+
+/* ===== BODY GRID ===== */
+.body{display:grid;grid-template-columns:252px minmax(0,1fr) 334px;min-height:0}
+.col{overflow-y:auto;min-height:0}
+.rail-l{background:var(--bg-1);border-right:1px solid var(--line);padding:14px 12px}
+.center{padding:18px 22px;display:flex;flex-direction:column;gap:20px}
+.rail-r{background:var(--bg-1);border-left:1px solid var(--line);padding:14px 14px;display:flex;flex-direction:column;gap:18px}
+
+/* ===== LEFT NAV ===== */
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:11px;padding:8px 11px 8px 13px;border-radius:7px;color:var(--text-2);text-decoration:none;font-size:13px;font-weight:500;position:relative;border-left:2px solid transparent}
+.nav a i{font-size:18px;width:18px;flex:none}
+.nav a:hover{background:var(--bg-2);color:var(--text)}
+.nav a.on{background:var(--bg-2);color:var(--text);border-left:2px solid var(--amber);border-radius:0 7px 7px 0}
+.nav a.on i{color:var(--amber)}
+.nav .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text-3);background:var(--bg-3);padding:1px 7px;border-radius:10px}
+.nav a.on .cnt{color:var(--amber-2);background:var(--amber-bg)}
+.nav .cnt.alert{color:var(--hot);background:var(--hot-bg)}
+.rail-sep{height:1px;background:var(--line-soft);margin:14px 4px}
+.block-h{display:flex;align-items:center;justify-content:space-between;padding:0 6px;margin-bottom:9px}
+
+.opanel{margin:0 4px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:9px;padding:12px}
+.opanel .row{display:flex;align-items:center;justify-content:space-between;padding:4px 0}
+.opanel .k{font-size:11.5px;color:var(--text-3)}
+.opanel .v{font-family:var(--mono);font-size:11.5px;color:var(--text-2)}
+.opanel .v.amber{color:var(--amber-2)}
+.opanel .head{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--line-soft)}
+.opanel .head .t{font-family:var(--disp);font-weight:600;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--ok)}
+
+.shortcut{display:flex;align-items:center;gap:9px;padding:7px 6px;border-radius:6px;cursor:pointer}
+.shortcut:hover{background:var(--bg-2)}
+.sdot{width:7px;height:7px;border-radius:50%;flex:none}
+.shortcut .sn{font-size:12.5px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shortcut .sm{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--text-3);flex:none}
+.foot{margin:16px 6px 4px;font-family:var(--mono);font-size:10px;color:var(--text-3);line-height:1.8}
+.foot .on-dot{color:var(--ok)}
+
+/* ===== COMMAND CENTER ===== */
+.cmd{background:var(--bg-1);border:1px solid var(--line);border-radius:12px;padding:16px 16px 14px;position:relative;overflow:hidden}
+.cmd::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--amber)}
+.cmd .ch{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.cmd .ch .t{font-family:var(--disp);font-weight:600;font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--amber-2)}
+.cmd .ch .meta{margin-left:auto;font-size:11px;color:var(--text-3);display:flex;align-items:center;gap:6px}
+.cmd-box{display:flex;gap:10px;align-items:flex-end}
+.cmd-input{flex:1;background:var(--bg-2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;color:var(--text);font-family:var(--sans);font-size:13.5px;min-height:54px;line-height:1.55}
+.cmd-input .ph{color:var(--text-3)}
+.send{flex:none;height:54px;padding:0 20px;background:var(--amber);color:oklch(0.22 0.03 70);border:none;border-radius:9px;font-family:var(--disp);font-weight:600;font-size:13px;letter-spacing:.04em;display:flex;align-items:center;gap:8px;cursor:pointer}
+.send i{font-size:18px}
+.send:hover{background:var(--amber-2)}
+.chips{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:7px;padding:6px 11px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:20px;font-size:12px;color:var(--text-2);cursor:pointer}
+.chip i{font-size:15px;color:var(--text-3)}
+.chip:hover{border-color:var(--amber-line);color:var(--text)}
+.chip:hover i{color:var(--amber)}
+
+/* ===== INSTRUMENT STRIP ===== */
+.strip{display:flex;align-items:stretch;background:var(--bg-1);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.strip .cell{flex:1;padding:13px 16px;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;gap:7px}
+.strip .cell:last-child{border-right:none}
+.strip .cl{font-family:var(--disp);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-3)}
+.strip .cv{font-family:var(--disp);font-weight:600;font-size:26px;line-height:1;letter-spacing:.01em;display:flex;align-items:baseline;gap:6px}
+.strip .cv small{font-size:12px;font-weight:500;color:var(--text-3)}
+.strip .cv.amber{color:var(--amber-2)}
+.strip .cv.ok{color:var(--ok)}
+.strip .cell.live{position:relative}
+.strip .live-on{display:flex;align-items:center;gap:7px;font-family:var(--disp);font-weight:600;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--ok)}
+
+/* ===== SECTIONS ===== */
+.sec-h{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+.sec-h .t{font-family:var(--disp);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-2)}
+.sec-h .n{font-family:var(--mono);font-size:11px;color:var(--text-3)}
+.sec-h .all{margin-left:auto;font-size:11.5px;color:var(--text-3);text-decoration:none;display:flex;align-items:center;gap:4px;cursor:pointer}
+.sec-h .all:hover{color:var(--amber-2)}
+
+/* command list */
+.clist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--bg-1)}
+.crow{display:grid;grid-template-columns:52px 1fr auto;gap:13px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--line-soft);position:relative}
+.crow:last-child{border-bottom:none}
+.crow:hover{background:var(--bg-2)}
+.crow.active{background:oklch(0.805 0.155 72 / .05)}
+.crow.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--amber)}
+.crow .ctime{font-family:var(--mono);font-size:11px;color:var(--text-3)}
+.crow .ctxt{min-width:0}
+.crow .ci{font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+.crow .croute{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ptag{font-size:10.5px;color:var(--text-2);background:var(--bg-3);padding:2px 8px;border-radius:5px;display:inline-flex;align-items:center;gap:5px}
+.ptag .d{width:6px;height:6px;border-radius:50%}
+.route{font-family:var(--mono);font-size:10.5px;color:var(--text-3);display:inline-flex;align-items:center;gap:5px}
+.route b{color:var(--amber-2);font-weight:500}
+.crow .cright{display:flex;align-items:center;gap:9px;justify-self:end}
+
+/* badges */
+.risk{font-family:var(--disp);font-weight:600;font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:5px;white-space:nowrap}
+.risk.low{color:var(--ok);background:var(--ok-bg)}
+.risk.med{color:var(--amber-2);background:var(--amber-bg)}
+.risk.high{color:var(--hot);background:var(--hot-bg)}
+.risk.blocked{color:var(--stop);background:var(--stop-bg)}
+.chipst{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:20px;white-space:nowrap}
+.chipst i{font-size:13px}
+.st-run{color:var(--amber-2);background:var(--amber-bg)}
+.st-wait{color:var(--hot);background:var(--hot-bg)}
+.st-done{color:var(--ok);background:var(--ok-bg)}
+.st-pend{color:var(--text-2);background:var(--bg-3)}
+.st-fail{color:var(--stop);background:var(--stop-bg)}
+.spin{width:7px;height:7px;border-radius:50%;background:var(--amber);animation:blink 1.3s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* tasks table */
+.tasks{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--bg-1)}
+.trow{display:grid;grid-template-columns:1fr 150px 120px auto;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line-soft)}
+.trow.head{padding:9px 14px;background:var(--bg-2)}
+.trow.head span{font-family:var(--disp);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+.trow:last-child{border-bottom:none}
+.trow:hover:not(.head){background:var(--bg-2)}
+.tt{font-size:12.5px;color:var(--text);font-weight:500;display:flex;align-items:center;gap:9px;min-width:0}
+.tt .tname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tagent{font-family:var(--mono);font-size:11px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prio{font-family:var(--disp);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.prio.h{color:var(--hot)} .prio.n{color:var(--text-3)} .prio.l{color:var(--text-3);opacity:.7}
+.ibar{height:2px;width:46px;background:var(--bg-3);border-radius:2px;overflow:hidden;position:relative}
+.ibar::after{content:'';position:absolute;height:100%;width:45%;background:var(--amber);border-radius:2px;animation:slide 1.6s ease-in-out infinite}
+@keyframes slide{0%{left:-45%}100%{left:100%}}
+
+/* projects */
+.projs{display:flex;flex-direction:column;gap:9px}
+.proj{display:grid;grid-template-columns:auto 1fr auto;gap:13px;align-items:center;padding:12px 14px;background:var(--bg-1);border:1px solid var(--line);border-radius:10px}
+.proj:hover{border-color:var(--line)}
+.pic{width:36px;height:36px;border-radius:8px;background:var(--bg-3);display:grid;place-items:center;color:var(--text-2);font-size:18px;flex:none}
+.pbody{min-width:0}
+.pn{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pmeta{font-size:11px;color:var(--text-3);display:flex;align-items:center;gap:8px}
+.pmeta .dotd{width:3px;height:3px;border-radius:50%;background:var(--text-3)}
+.pprog{display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;width:120px}
+.pbar{width:100%;height:5px;background:var(--bg-3);border-radius:3px;overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--amber);border-radius:3px}
+.ppct{font-family:var(--mono);font-size:10.5px;color:var(--text-2)}
+.pagents{display:flex}
+.pagents .ag{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--bg-1);background:var(--bg-3);display:grid;place-items:center;font-family:var(--disp);font-size:9px;font-weight:600;color:var(--amber-2);margin-left:-6px}
+.pagents .ag:first-child{margin-left:0}
+
+/* ===== RIGHT RAIL ===== */
+.rcard{background:var(--bg-2);border:1px solid var(--line-soft);border-radius:10px;overflow:hidden}
+.rh{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}
+.rh .t{font-family:var(--disp);font-weight:600;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--text-2)}
+.rh .n{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--text-3)}
+
+.agent-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}
+.agent-row:last-child{border-bottom:none}
+.agent-row:hover{background:var(--bg-3)}
+.ai{width:30px;height:30px;border-radius:7px;background:var(--bg-3);display:grid;place-items:center;color:var(--text-2);font-size:16px;flex:none;position:relative}
+.ai.run{color:var(--amber);background:var(--amber-bg)}
+.ai .live{position:absolute;bottom:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:var(--amber);border:2px solid var(--bg-2)}
+.an{min-width:0;flex:1}
+.an .nm{font-size:12.5px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.an .rl{font-size:10.5px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ameta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none}
+.aver{font-family:var(--mono);font-size:10px;color:var(--text-3)}
+.toggle{width:30px;height:17px;border-radius:10px;background:var(--ok);position:relative;flex:none}
+.toggle i{position:absolute;top:2px;right:2px;width:13px;height:13px;border-radius:50%;background:oklch(0.18 0.006 68)}
+.toggle.off{background:var(--bg-3)}
+.toggle.off i{right:auto;left:2px}
+
+/* approvals */
+.appr{padding:12px;border-bottom:1px solid var(--line-soft);border-left:3px solid var(--hot);position:relative}
+.appr:last-child{border-bottom:none}
+.appr.med{border-left-color:var(--amber)}
+.appr .at{font-size:12.5px;font-weight:500;color:var(--text);line-height:1.4;margin-bottom:7px}
+.appr .arow{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.appr .who{font-family:var(--mono);font-size:10.5px;color:var(--text-3)}
+.appr .acts{display:flex;gap:8px}
+.btn{flex:1;padding:7px 0;border-radius:7px;font-family:var(--disp);font-weight:600;font-size:11.5px;letter-spacing:.04em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line)}
+.btn i{font-size:15px}
+.btn.acc{background:var(--ok-bg);color:var(--ok);border-color:oklch(0.77 0.14 152 / .3)}
+.btn.acc:hover{background:oklch(0.77 0.14 152 / .22)}
+.btn.rej{background:transparent;color:var(--text-2)}
+.btn.rej:hover{background:var(--stop-bg);color:var(--stop);border-color:oklch(0.635 0.20 28 / .3)}
+
+/* logs console */
+.console{background:oklch(0.15 0.006 68);border:1px solid var(--line-soft);border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.75;position:relative;max-height:230px;overflow:hidden}
+.console::after{content:'';position:absolute;left:0;right:0;bottom:0;height:46px;background:linear-gradient(to bottom,transparent,oklch(0.15 0.006 68))}
+.lg{display:flex;gap:9px;align-items:baseline;white-space:nowrap}
+.lg .lt{color:var(--text-3);flex:none}
+.lg .ld{width:6px;height:6px;border-radius:50%;flex:none;align-self:center}
+.lg .ld.info{background:var(--steel)} .lg .ld.warn{background:var(--amber)} .lg .ld.err{background:var(--stop)}
+.lg .le{color:var(--text-2);flex:none}
+.lg .lm{color:var(--text-3);overflow:hidden;text-overflow:ellipsis}
+.lg .le.err{color:var(--stop)} .lg .le.warn{color:var(--amber-2)}
+
+/* load animation */
+.fade{opacity:0;transform:translateY(8px);animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important}
+  .fade{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="oklch(0.2 0.02 70)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 4H6a2 2 0 0 0-2 2v3"/><path d="M15 4h3a2 2 0 0 1 2 2v3"/>
+          <path d="M9 20H6a2 2 0 0 1-2-2v-3"/><path d="M15 20h3a2 2 0 0 0 2-2v-3"/>
+          <circle cx="12" cy="12" r="2.4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="name">BTP OpenClaw</div>
+        <div class="sub">Cockpit</div>
+      </div>
+    </div>
+
+    <div class="status-readout">
+      <span class="pulse"></span>
+      <span class="lbl">Opérationnel</span>
+      <span class="meta">· 240&nbsp;ms · file 2 · claude-opus-4.8</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <span class="tag-int">Interne</span>
+    <div class="topdiv"></div>
+    <span class="clock tnum">ven. 14 juin · 14:32</span>
+    <button class="iconbtn"><i class="ti ti-bell"></i><span class="dotbadge"></span></button>
+    <div class="avatar">CB</div>
+  </header>
+
+  <!-- ============ BODY ============ -->
+  <div class="body">
+
+    <!-- ===== LEFT RAIL ===== -->
+    <aside class="col rail-l">
+      <nav class="nav">
+        <a class="on"><i class="ti ti-layout-dashboard"></i>Dashboard</a>
+        <a><i class="ti ti-terminal-2"></i>Centre OpenClaw</a>
+        <a><i class="ti ti-building-skyscraper"></i>Projets<span class="cnt">4</span></a>
+        <a><i class="ti ti-robot"></i>Sous-agents<span class="cnt">4</span></a>
+        <a><i class="ti ti-checklist"></i>Tâches<span class="cnt">6</span></a>
+        <a><i class="ti ti-shield-check"></i>Validations<span class="cnt alert">3</span></a>
+        <a><i class="ti ti-file-text"></i>Documents<span class="cnt">12</span></a>
+        <a><i class="ti ti-list-details"></i>Logs</a>
+        <a><i class="ti ti-settings"></i>Paramètres</a>
+      </nav>
+
+      <div class="rail-sep"></div>
+
+      <div class="opanel">
+        <div class="head"><span class="pulse"></span><span class="t">Statut OpenClaw</span></div>
+        <div class="row"><span class="k">État</span><span class="v amber">Opérationnel</span></div>
+        <div class="row"><span class="k">Uptime</span><span class="v tnum">99,8 %</span></div>
+        <div class="row"><span class="k">File d'attente</span><span class="v tnum">2 tâches</span></div>
+        <div class="row"><span class="k">Modèle actif</span><span class="v">opus-4.8</span></div>
+      </div>
+
+      <div class="rail-sep"></div>
+
+      <div class="block-h"><span class="micro">Raccourcis projets</span></div>
+      <div class="shortcut"><span class="sdot" style="background:var(--amber)"></span><span class="sn">Villa Ducos</span><span class="sm tnum">4 tâ.</span></div>
+      <div class="shortcut"><span class="sdot" style="background:var(--ok)"></span><span class="sn">Groupe scolaire J.-Moulin</span><span class="sm tnum">3 tâ.</span></div>
+      <div class="shortcut"><span class="sdot" style="background:var(--ok)"></span><span class="sn">Entrepôt Logistia</span><span class="sm tnum">2 tâ.</span></div>
+      <div class="shortcut"><span class="sdot" style="background:var(--steel)"></span><span class="sn">Copro. Haussmann 9e</span><span class="sm tnum">1 tâ.</span></div>
+
+      <div class="foot">
+        <span class="on-dot">●</span> backend railway · ok<br/>
+        postgres · 7 tables<br/>
+        cockpit v0.1.0 — vague 0
+      </div>
+    </aside>
+
+    <!-- ===== CENTER ===== -->
+    <main class="col center">
+
+      <!-- command center -->
+      <section class="cmd fade" style="animation-delay:.02s">
+        <div class="ch">
+          <i class="ti ti-terminal-2" style="color:var(--amber);font-size:17px"></i>
+          <span class="t">Centre de commande · OpenClaw</span>
+          <span class="meta"><i class="ti ti-lock" style="font-size:13px"></i> OpenClaw propose · le backend valide</span>
+        </div>
+        <div class="cmd-box">
+          <div class="cmd-input"><span class="ph">Ex : Analyse les photos du chantier Villa Ducos et prépare un devis placo-peinture…</span></div>
+          <button class="send"><i class="ti ti-send"></i>Exécuter</button>
+        </div>
+        <div class="chips">
+          <span class="chip"><i class="ti ti-camera"></i>Analyse photo</span>
+          <span class="chip"><i class="ti ti-receipt"></i>Créer un devis</span>
+          <span class="chip"><i class="ti ti-clipboard-text"></i>Compte-rendu chantier</span>
+          <span class="chip"><i class="ti ti-file-search"></i>Analyser appel d'offre</span>
+        </div>
+      </section>
+
+      <!-- instrument strip -->
+      <section class="strip fade" style="animation-delay:.06s">
+        <div class="cell live">
+          <span class="cl">OpenClaw</span>
+          <span class="live-on"><span class="pulse"></span>Opér.</span>
+        </div>
+        <div class="cell"><span class="cl">Projets actifs</span><span class="cv tnum">4</span></div>
+        <div class="cell"><span class="cl">Sous-agents</span><span class="cv ok tnum">4<small>/4 actifs</small></span></div>
+        <div class="cell"><span class="cl">Tâches en cours</span><span class="cv tnum">6</span></div>
+        <div class="cell"><span class="cl">Validations urgentes</span><span class="cv amber tnum">3</span></div>
+        <div class="cell"><span class="cl">Documents · 7&nbsp;j</span><span class="cv tnum">12</span></div>
+      </section>
+
+      <!-- recent commands -->
+      <section class="fade" style="animation-delay:.10s">
+        <div class="sec-h"><span class="t">Commandes OpenClaw récentes</span><span class="n">· aujourd'hui</span><a class="all">Tout voir <i class="ti ti-arrow-right" style="font-size:13px"></i></a></div>
+        <div class="clist">
+          <div class="crow active">
+            <span class="ctime">14:32</span>
+            <div class="ctxt">
+              <div class="ci">Analyse les photos du chantier Villa Ducos et prépare un devis placo-peinture.</div>
+              <div class="croute">
+                <span class="ptag"><span class="d" style="background:var(--amber)"></span>Villa Ducos</span>
+                <span class="route">create_quote_from_photo <i class="ti ti-arrow-narrow-right"></i> <b>quote_agent</b></span>
+              </div>
+            </div>
+            <div class="cright"><span class="risk med">Moyen</span><span class="chipst st-run"><span class="spin"></span>En cours</span></div>
+          </div>
+
+          <div class="crow">
+            <span class="ctime">14:18</span>
+            <div class="ctxt">
+              <div class="ci">Prépare un compte-rendu de la visite de ce matin sur l'entrepôt Logistia.</div>
+              <div class="croute">
+                <span class="ptag"><span class="d" style="background:var(--ok)"></span>Logistia</span>
+                <span class="route">create_site_report <i class="ti ti-arrow-narrow-right"></i> <b>site_report_agent</b></span>
+              </div>
+            </div>
+            <div class="cright"><span class="risk low">Faible</span><span class="chipst st-done"><i class="ti ti-check"></i>Terminé</span></div>
+          </div>
+
+          <div class="crow">
+            <span class="ctime">13:55</span>
+            <div class="ctxt">
+              <div class="ci">Analyse le DCE de l'appel d'offre Mairie de Ducos et liste les pièces demandées.</div>
+              <div class="croute">
+                <span class="ptag"><span class="d" style="background:var(--ok)"></span>J.-Moulin</span>
+                <span class="route">analyze_tender <i class="ti ti-arrow-narrow-right"></i> <b>tender_agent</b></span>
+              </div>
+            </div>
+            <div class="cright"><span class="risk med">Moyen</span><span class="chipst st-wait"><i class="ti ti-clock-pause"></i>Validation</span></div>
+          </div>
+
+          <div class="crow">
+            <span class="ctime">11:40</span>
+            <div class="ctxt">
+              <div class="ci">Résume les travaux visibles sur les photos de façade Haussmann.</div>
+              <div class="croute">
+                <span class="ptag"><span class="d" style="background:var(--steel)"></span>Haussmann</span>
+                <span class="route">analyze_photo <i class="ti ti-arrow-narrow-right"></i> <b>photo_analysis_agent</b></span>
+              </div>
+            </div>
+            <div class="cright"><span class="risk low">Faible</span><span class="chipst st-done"><i class="ti ti-check"></i>Terminé</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- active tasks -->
+      <section class="fade" style="animation-delay:.14s">
+        <div class="sec-h"><span class="t">Tâches actives</span><span class="n">6</span><a class="all">File complète <i class="ti ti-arrow-right" style="font-size:13px"></i></a></div>
+        <div class="tasks">
+          <div class="trow head"><span>Tâche</span><span>Agent</span><span>Statut</span><span>Prio.</span></div>
+          <div class="trow">
+            <div class="tt"><i class="ti ti-receipt" style="color:var(--amber);font-size:16px"></i><span class="tname">Devis placo-peinture · Villa Ducos</span><span class="ibar"></span></div>
+            <span class="tagent">quote_agent</span>
+            <span class="chipst st-run"><span class="spin"></span>running</span>
+            <span class="prio h">Haute</span>
+          </div>
+          <div class="trow">
+            <div class="tt"><i class="ti ti-camera" style="color:var(--text-2);font-size:16px"></i><span class="tname">Analyse 14 photos façade</span><span class="ibar"></span></div>
+            <span class="tagent">photo_analysis_agent</span>
+            <span class="chipst st-run"><span class="spin"></span>running</span>
+            <span class="prio n">Normale</span>
+          </div>
+          <div class="trow">
+            <div class="tt"><i class="ti ti-file-search" style="color:var(--hot);font-size:16px"></i><span class="tname">Extraction pièces DCE</span></div>
+            <span class="tagent">tender_agent</span>
+            <span class="chipst st-wait"><i class="ti ti-clock-pause"></i>waiting_approval</span>
+            <span class="prio h">Haute</span>
+          </div>
+          <div class="trow">
+            <div class="tt"><i class="ti ti-receipt" style="color:var(--text-2);font-size:16px"></i><span class="tname">Devis lot peinture · J.-Moulin</span></div>
+            <span class="tagent">quote_agent</span>
+            <span class="chipst st-wait"><i class="ti ti-clock-pause"></i>waiting_approval</span>
+            <span class="prio n">Normale</span>
+          </div>
+          <div class="trow">
+            <div class="tt"><i class="ti ti-clipboard-check" style="color:var(--ok);font-size:16px"></i><span class="tname">Compte-rendu visite Logistia</span></div>
+            <span class="tagent">site_report_agent</span>
+            <span class="chipst st-done"><i class="ti ti-check"></i>completed</span>
+            <span class="prio n">Normale</span>
+          </div>
+          <div class="trow">
+            <div class="tt"><i class="ti ti-ruler-2" style="color:var(--text-3);font-size:16px"></i><span class="tname">Métré cloisons étage 1</span></div>
+            <span class="tagent">quote_agent</span>
+            <span class="chipst st-pend"><i class="ti ti-clock"></i>pending</span>
+            <span class="prio l">Basse</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- projects -->
+      <section class="fade" style="animation-delay:.18s">
+        <div class="sec-h"><span class="t">Projets en cours</span><span class="n">4</span><a class="all">Tous les projets <i class="ti ti-arrow-right" style="font-size:13px"></i></a></div>
+        <div class="projs">
+          <div class="proj">
+            <div class="pic"><i class="ti ti-home"></i></div>
+            <div class="pbody">
+              <div class="pn">Chantier Villa Ducos</div>
+              <div class="pmeta">M. &amp; Mme Ducos<span class="dotd"></span>Rénovation intérieure<span class="dotd"></span>4 tâches</div>
+            </div>
+            <div class="pprog">
+              <div class="pagents"><span class="ag">PH</span><span class="ag">DV</span></div>
+              <div class="pbar"><i style="width:62%"></i></div>
+              <span class="ppct tnum">62 %</span>
+            </div>
+          </div>
+          <div class="proj">
+            <div class="pic"><i class="ti ti-school"></i></div>
+            <div class="pbody">
+              <div class="pn">Groupe scolaire Jean-Moulin</div>
+              <div class="pmeta">Mairie de Ducos<span class="dotd"></span>Réhabilitation<span class="dotd"></span>3 tâches</div>
+            </div>
+            <div class="pprog">
+              <div class="pagents"><span class="ag">DV</span><span class="ag">AO</span></div>
+              <div class="pbar"><i style="width:38%"></i></div>
+              <span class="ppct tnum">38 %</span>
+            </div>
+          </div>
+          <div class="proj">
+            <div class="pic"><i class="ti ti-building-warehouse"></i></div>
+            <div class="pbody">
+              <div class="pn">Entrepôt Logistia</div>
+              <div class="pmeta">Logistia SAS<span class="dotd"></span>Extension<span class="dotd"></span>2 tâches</div>
+            </div>
+            <div class="pprog">
+              <div class="pagents"><span class="ag">CR</span></div>
+              <div class="pbar"><i style="width:81%"></i></div>
+              <span class="ppct tnum">81 %</span>
+            </div>
+          </div>
+          <div class="proj">
+            <div class="pic"><i class="ti ti-building-cottage"></i></div>
+            <div class="pbody">
+              <div class="pn">Copropriété Haussmann 9e</div>
+              <div class="pmeta">Syndic Foncia<span class="dotd"></span>Ravalement façade<span class="dotd"></span>1 tâche</div>
+            </div>
+            <div class="pprog">
+              <div class="pagents"><span class="ag">PH</span></div>
+              <div class="pbar"><i style="width:15%"></i></div>
+              <span class="ppct tnum">15 %</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===== RIGHT RAIL ===== -->
+    <aside class="col rail-r">
+
+      <!-- sub-agents -->
+      <div class="rcard fade" style="animation-delay:.08s">
+        <div class="rh"><i class="ti ti-robot" style="color:var(--text-2);font-size:16px"></i><span class="t">Sous-agents actifs</span><span class="n">4/4</span></div>
+        <div class="agent-row">
+          <div class="ai run"><i class="ti ti-camera"></i><span class="live"></span></div>
+          <div class="an"><div class="nm">Analyse Photo BTP</div><div class="rl">Analyse visuelle chantier</div></div>
+          <div class="ameta"><span class="risk low">Faible</span><span class="aver">v1.0.0 · 128</span></div>
+        </div>
+        <div class="agent-row">
+          <div class="ai"><i class="ti ti-receipt"></i></div>
+          <div class="an"><div class="nm">Création Devis</div><div class="rl">Métré &amp; chiffrage</div></div>
+          <div class="ameta"><span class="risk med">Moyen</span><span class="aver">v1.2.0 · 64</span></div>
+        </div>
+        <div class="agent-row">
+          <div class="ai"><i class="ti ti-clipboard-text"></i></div>
+          <div class="an"><div class="nm">Compte-rendu Chantier</div><div class="rl">Synthèse de visite</div></div>
+          <div class="ameta"><span class="risk low">Faible</span><span class="aver">v1.0.0 · 47</span></div>
+        </div>
+        <div class="agent-row">
+          <div class="ai"><i class="ti ti-file-search"></i></div>
+          <div class="an"><div class="nm">Appel d'Offre</div><div class="rl">Analyse DCE &amp; mémoire</div></div>
+          <div class="ameta"><span class="risk med">Moyen</span><span class="aver">v1.1.0 · 19</span></div>
+        </div>
+      </div>
+
+      <!-- approvals -->
+      <div class="rcard fade" style="animation-delay:.12s">
+        <div class="rh"><i class="ti ti-shield-check" style="color:var(--hot);font-size:16px"></i><span class="t">Validations urgentes</span><span class="n">3</span></div>
+        <div class="appr">
+          <div class="at">Envoyer le devis placo-peinture au client</div>
+          <div class="arow"><span class="risk high">Élevé</span><span class="ptag"><span class="d" style="background:var(--amber)"></span>Villa Ducos</span><span class="who">quote_agent · 4 min</span></div>
+          <div class="acts"><button class="btn acc"><i class="ti ti-check"></i>Accepter</button><button class="btn rej"><i class="ti ti-x"></i>Refuser</button></div>
+        </div>
+        <div class="appr med">
+          <div class="at">Valider la réponse à l'appel d'offre</div>
+          <div class="arow"><span class="risk med">Moyen</span><span class="ptag"><span class="d" style="background:var(--ok)"></span>Mairie de Ducos</span><span class="who">tender_agent · 22 min</span></div>
+          <div class="acts"><button class="btn acc"><i class="ti ti-check"></i>Accepter</button><button class="btn rej"><i class="ti ti-x"></i>Refuser</button></div>
+        </div>
+        <div class="appr">
+          <div class="at">Modifier le devis lot peinture validé</div>
+          <div class="arow"><span class="risk high">Élevé</span><span class="ptag"><span class="d" style="background:var(--ok)"></span>J.-Moulin</span><span class="who">quote_agent · 1 h</span></div>
+          <div class="acts"><button class="btn acc"><i class="ti ti-check"></i>Accepter</button><button class="btn rej"><i class="ti ti-x"></i>Refuser</button></div>
+        </div>
+      </div>
+
+      <!-- logs -->
+      <div class="fade" style="animation-delay:.16s">
+        <div class="sec-h" style="margin-bottom:9px"><span class="t" style="font-size:11px">Logs récents</span><span class="n">live</span><a class="all">Console <i class="ti ti-arrow-right" style="font-size:13px"></i></a></div>
+        <div class="console">
+          <div class="lg"><span class="lt">14:32:09</span><span class="ld info"></span><span class="le">agent.run</span><span class="lm">quote_agent v1.2.0 démarré</span></div>
+          <div class="lg"><span class="lt">14:32:08</span><span class="ld info"></span><span class="le">task.created</span><span class="lm">devis → quote_agent</span></div>
+          <div class="lg"><span class="lt">14:32:07</span><span class="ld info"></span><span class="le">command.received</span><span class="lm">ordre #C-2291</span></div>
+          <div class="lg"><span class="lt">14:31:50</span><span class="ld warn"></span><span class="le warn">approval.req</span><span class="lm">envoi client · risk:high</span></div>
+          <div class="lg"><span class="lt">14:30:12</span><span class="ld info"></span><span class="le">document.gen</span><span class="lm">devis_villa-ducos_v1 (draft)</span></div>
+          <div class="lg"><span class="lt">14:28:44</span><span class="ld info"></span><span class="le">agent.run</span><span class="lm">photo_analysis terminé · 14 ph.</span></div>
+          <div class="lg"><span class="lt">14:25:03</span><span class="ld err"></span><span class="le err">agent.error</span><span class="lm">tender: DCE illisible p.7</span></div>
+          <div class="lg"><span class="lt">14:22:31</span><span class="ld info"></span><span class="le">command.received</span><span class="lm">ordre #C-2290</span></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+</body>
+</html>
