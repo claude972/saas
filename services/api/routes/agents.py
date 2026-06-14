@@ -217,7 +217,7 @@ async def _run_agent_task(task_id: uuid.UUID, agent_id: uuid.UUID, slug: str) ->
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
-@router.get("/", response_model=list[AgentRead])
+@router.get("", response_model=list[AgentRead])
 async def list_agents(
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(get_current_user),
@@ -227,7 +227,7 @@ async def list_agents(
     return list(result.scalars().all())
 
 
-@router.post("/", response_model=AgentRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=AgentRead, status_code=status.HTTP_201_CREATED)
 async def create_agent(
     payload: AgentCreate,
     db: AsyncSession = Depends(get_db),
