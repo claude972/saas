@@ -4,6 +4,9 @@ Uses pydantic-settings (Pydantic v2). All values have dev-friendly defaults so
 the app boots locally without a populated .env file.
 """
 
+from urllib.parse import urlsplit, urlunsplit
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,7 +17,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Database (SQLAlchemy 2.0 async / asyncpg)
+    # Database (SQLAlchemy 2.0 async / asyncpg).
     DATABASE_URL: str = "postgresql+asyncpg://openclaw:openclaw@localhost:5432/openclaw"
 
     # Auth / JWT
@@ -26,12 +29,45 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = "admin@btp.local"
     ADMIN_PASSWORD: str = "changeme"
 
-    # Frontend origin (CORS)
+    # Frontend origin(s) for CORS. Comma-separated list supported, e.g.
+    # "http://localhost:3000,https://cockpit-web.up.railway.app".
     FRONTEND_ORIGIN: str = "http://localhost:3000"
 
     # LLM (Anthropic). Empty string => no client, agents return stubs.
     ANTHROPIC_API_KEY: str = ""
     OPENCLAW_MODEL: str = "claude-opus-4-8"
+
+    @field_validator("DATABASE_URL", mode="after")
+    @classmethod
+    def _async_dsn(cls, v: str) -> str:
+        """Normalize a provider DSN to the asyncpg driver.
+
+        Railway/Heroku inject ``postgres://`` or ``postgresql://``; the async
+        engine needs ``postgresql+asyncpg://``. A ``sslmode`` query parameter
+        (which asyncpg does not understand) is also dropped.
+        """
+        if v.startswith("postgres://"):
+            v = "postgresql+asyncpg://" + v[len("postgres://") :]
+        elif v.startswith("postgresql://"):
+            v = "postgresql+asyncpg://" + v[len("postgresql://") :]
+
+        if "sslmode=" in v:
+            parts = urlsplit(v)
+            query = "&".join(
+                kv
+                for kv in parts.query.split("&")
+                if kv and not kv.startswith("sslmode=")
+            )
+            v = urlunsplit(
+                (parts.scheme, parts.netloc, parts.path, query, parts.fragment)
+            )
+        return v
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """FRONTEND_ORIGIN split into a list of allowed CORS origins."""
+        origins = [o.strip() for o in self.FRONTEND_ORIGIN.split(",")]
+        return [o for o in origins if o] or ["http://localhost:3000"]
 
 
 settings = Settings()
