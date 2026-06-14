@@ -45,6 +45,11 @@ class SiteReportAgent(BaseAgent):
         """Run the report drafting for the ``create_site_report`` intent."""
         instruction = input_data.get("instruction", "")
         project_id = input_data.get("project_id")
+        provider: str | None = input_data.get("provider") or None
+        model: str | None = input_data.get("model") or None
+        skills_text: str = str(input_data.get("skills_text") or "").strip()
+
+        system = f"{skills_text}\n\n{SYSTEM_PROMPT}" if skills_text else SYSTEM_PROMPT
 
         user = (
             "Redige un compte-rendu de visite de chantier a partir des "
@@ -54,7 +59,12 @@ class SiteReportAgent(BaseAgent):
         )
 
         try:
-            result = await complete_json(system=SYSTEM_PROMPT, user=user)
+            result = await complete_json(
+                system=system,
+                user=user,
+                provider=provider,
+                model=model,
+            )
         except (LLMUnavailable, Exception):  # noqa: BLE001 - stay functional
             return self._stub(instruction)
 

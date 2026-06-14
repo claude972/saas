@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
-
-const MODEL = "claude-opus-4.8";
+import { api } from "@/lib/api";
+import type { OpenClawStatus } from "@/lib/types";
 
 function formatClock(d: Date): string {
   const date = new Intl.DateTimeFormat("fr-FR", {
@@ -20,6 +20,7 @@ function formatClock(d: Date): string {
 
 export function Topbar() {
   const [clock, setClock] = useState<string>("");
+  const [ocStatus, setOcStatus] = useState<OpenClawStatus | null>(null);
 
   useEffect(() => {
     const tick = () => setClock(formatClock(new Date()));
@@ -27,6 +28,26 @@ export function Topbar() {
     const id = setInterval(tick, 1000 * 30);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const status = await api.getOpenclawStatus();
+        if (!cancelled) setOcStatus(status);
+      } catch {
+        // keep previous state on error — no crash
+      }
+    }
+    void poll();
+    const id = setInterval(() => void poll(), 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  const connected = ocStatus?.connected ?? false;
 
   return (
     <header className="flex h-[54px] items-center gap-[18px] border-b border-line bg-bg-1 px-[18px]">
@@ -60,13 +81,16 @@ export function Topbar() {
         </div>
       </div>
 
-      {/* operational readout */}
+      {/* OpenClaw connection status */}
       <div className="flex items-center gap-[9px] rounded-[20px] border border-line-soft bg-bg-2 px-[13px] py-[6px]">
-        <Pulse />
-        <span className="disp text-[11px] font-semibold uppercase tracking-[0.1em] text-ok">
-          Opérationnel
+        {connected ? <Pulse /> : <PulseGray />}
+        <span
+          className={`disp text-[11px] font-semibold uppercase tracking-[0.1em] ${
+            connected ? "text-ok" : "text-text3"
+          }`}
+        >
+          {connected ? "OpenClaw connecté" : "OpenClaw déconnecté"}
         </span>
-        <span className="mono text-[11px] text-text2">· {MODEL}</span>
       </div>
 
       <div className="flex-1" />
@@ -102,5 +126,11 @@ function Pulse() {
         aria-hidden
       />
     </span>
+  );
+}
+
+function PulseGray() {
+  return (
+    <span className="relative h-[8px] w-[8px] flex-none rounded-full bg-text3" aria-hidden />
   );
 }

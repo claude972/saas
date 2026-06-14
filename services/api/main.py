@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 # Import models so every table is registered on Base.metadata before create_all.
 import models  # noqa: F401
@@ -29,6 +29,8 @@ from routes.documents import router as documents_router
 from routes.logs import router as logs_router
 from routes.openclaw import router as openclaw_router
 from routes.projects import router as projects_router
+from routes.settings import router as settings_router
+from routes.skills import router as skills_router
 from routes.tasks import router as tasks_router
 
 logger = logging.getLogger("openclaw.api")
@@ -39,6 +41,17 @@ async def lifespan(app: FastAPI):
     # 1 + 2. Create all tables registered on Base.metadata.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # create_all never ALTERs existing tables, so add columns introduced
+        # after a table was first created. Idempotent (Postgres IF NOT EXISTS).
+        await conn.execute(
+            text(
+                "ALTER TABLE agents ADD COLUMN IF NOT EXISTS "
+                "provider VARCHAR(50) NOT NULL DEFAULT 'anthropic'"
+            )
+        )
+        await conn.execute(
+            text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS model VARCHAR(255)")
+        )
 
     # 3. Seed agents only when the agents table is empty.
     try:
@@ -74,6 +87,8 @@ app.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 app.include_router(approvals_router, prefix="/approvals", tags=["approvals"])
 app.include_router(documents_router, prefix="/documents", tags=["documents"])
 app.include_router(logs_router, prefix="/logs", tags=["logs"])
+app.include_router(skills_router, prefix="/skills", tags=["skills"])
+app.include_router(settings_router, prefix="/settings", tags=["settings"])
 
 
 @app.get("/health")

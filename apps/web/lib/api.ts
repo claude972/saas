@@ -5,15 +5,25 @@ import type {
   Approval,
   ApprovalDecisionInput,
   AuthUser,
+  CompanySettings,
+  CompanySettingsUpdateInput,
+  CreateAgentInput,
   CreateProjectInput,
+  ExportFormat,
+  LLMConfig,
   LogEntry,
   LoginInput,
   LoginResponse,
   OpenClawCommand,
+  OpenClawStatus,
   Project,
   SendCommandInput,
+  Skill,
+  SkillCreateInput,
+  SkillUpdateInput,
   Task,
   UpdateAgentInput,
+  UpdateDocumentInput,
   UpdateProjectInput,
   UpdateTaskInput,
 } from "@/lib/types";
@@ -21,7 +31,7 @@ import type {
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type Method = "GET" | "POST" | "PATCH";
+type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
 interface RequestOptions {
   method?: Method;
@@ -138,6 +148,9 @@ export const api = {
   getAgent(id: string): Promise<Agent> {
     return request<Agent>(`/agents/${id}`);
   },
+  createAgent(input: CreateAgentInput): Promise<Agent> {
+    return request<Agent>("/agents", { method: "POST", body: input });
+  },
   updateAgent(id: string, input: UpdateAgentInput): Promise<Agent> {
     return request<Agent>(`/agents/${id}`, { method: "PATCH", body: input });
   },
@@ -152,6 +165,23 @@ export const api = {
   },
   disableAgent(id: string): Promise<Agent> {
     return request<Agent>(`/agents/${id}/disable`, { method: "POST" });
+  },
+
+  // ---------- Skills ----------
+  listSkills(): Promise<Skill[]> {
+    return request<Skill[]>("/skills");
+  },
+  getSkill(id: string): Promise<Skill> {
+    return request<Skill>(`/skills/${id}`);
+  },
+  createSkill(input: SkillCreateInput): Promise<Skill> {
+    return request<Skill>("/skills", { method: "POST", body: input });
+  },
+  updateSkill(id: string, input: SkillUpdateInput): Promise<Skill> {
+    return request<Skill>(`/skills/${id}`, { method: "PATCH", body: input });
+  },
+  deleteSkill(id: string): Promise<void> {
+    return request<void>(`/skills/${id}`, { method: "DELETE" });
   },
 
   // ---------- Tasks ----------
@@ -189,6 +219,16 @@ export const api = {
   getDocument(id: string): Promise<AppDocument> {
     return request<AppDocument>(`/documents/${id}`);
   },
+  updateDocument(id: string, input: UpdateDocumentInput): Promise<AppDocument> {
+    return request<AppDocument>(`/documents/${id}`, {
+      method: "PATCH",
+      body: input,
+    });
+  },
+  /** Returns the URL to fetch directly (StreamingResponse — not JSON). */
+  exportDocumentUrl(id: string, format: ExportFormat): string {
+    return `${BASE_URL}/documents/${id}/export?format=${format}`;
+  },
 
   // ---------- Logs ----------
   listLogs(): Promise<LogEntry[]> {
@@ -196,6 +236,25 @@ export const api = {
   },
   listProjectLogs(projectId: string): Promise<LogEntry[]> {
     return request<LogEntry[]>(`/logs/${projectId}`);
+  },
+
+  // ---------- Settings ----------
+  getCompanySettings(): Promise<CompanySettings> {
+    return request<CompanySettings>("/settings/company");
+  },
+  updateCompanySettings(input: CompanySettingsUpdateInput): Promise<CompanySettings> {
+    return request<CompanySettings>("/settings/company", {
+      method: "PATCH",
+      body: input,
+    });
+  },
+  getLlmConfig(): Promise<LLMConfig> {
+    return request<LLMConfig>("/settings/llm");
+  },
+
+  // ---------- OpenClaw status ----------
+  getOpenclawStatus(): Promise<OpenClawStatus> {
+    return request<OpenClawStatus>("/openclaw/status");
   },
 };
 

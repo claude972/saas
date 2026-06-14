@@ -4,14 +4,22 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Bot,
+  Building2,
+  Check,
   Cpu,
   Database,
+  FileText,
   Gauge,
   KeyRound,
   LogOut,
+  Mail,
   Moon,
+  Percent,
+  Phone,
   RefreshCw,
   Rows3,
+  Save,
   Server,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -21,7 +29,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { AuthUser } from "@/lib/types";
+import type {
+  AuthUser,
+  CompanySettings,
+  CompanySettingsUpdateInput,
+  LLMConfig,
+} from "@/lib/types";
 import { getToken, clearToken } from "@/lib/auth";
 import { Panel } from "@/components/ui/Panel";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -171,8 +184,40 @@ export default function SettingsPage() {
             <AccountPanel user={data.user} onLogout={logout} />
           </section>
 
-          {/* static UI preferences */}
+          {/* company settings */}
           <section className="oc-fade" style={{ animationDelay: "0.12s" }}>
+            <SectionHeader
+              title="Société"
+              icon={
+                <Building2
+                  size={16}
+                  strokeWidth={2}
+                  className="text-text2"
+                  aria-hidden
+                />
+              }
+            />
+            <CompanySettingsPanel />
+          </section>
+
+          {/* LLM providers */}
+          <section className="oc-fade" style={{ animationDelay: "0.16s" }}>
+            <SectionHeader
+              title="Modèles &amp; fournisseurs LLM"
+              icon={
+                <Bot
+                  size={16}
+                  strokeWidth={2}
+                  className="text-text2"
+                  aria-hidden
+                />
+              }
+            />
+            <LLMConfigPanel />
+          </section>
+
+          {/* static UI preferences */}
+          <section className="oc-fade" style={{ animationDelay: "0.20s" }}>
             <SectionHeader
               title="Préférences d'affichage"
               icon={
@@ -189,6 +234,377 @@ export default function SettingsPage() {
         </>
       )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Company settings form.                                               */
+/* ------------------------------------------------------------------ */
+
+function CompanySettingsPanel() {
+  const [settings, setSettings] = useState<CompanySettings | null>(null);
+  const [form, setForm] = useState<CompanySettingsUpdateInput>({});
+  const [loadingData, setLoadingData] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .getCompanySettings()
+      .then((s) => {
+        setSettings(s);
+        setForm({
+          company_name: s.company_name,
+          siret: s.siret ?? "",
+          vat_number: s.vat_number ?? "",
+          address: s.address ?? "",
+          email: s.email ?? "",
+          phone: s.phone ?? "",
+          legal_mentions: s.legal_mentions ?? "",
+          default_tva_rate: s.default_tva_rate,
+        });
+      })
+      .catch((e: unknown) =>
+        setErr(
+          e instanceof Error ? e.message : "Impossible de charger les paramètres société.",
+        ),
+      )
+      .finally(() => setLoadingData(false));
+  }, []);
+
+  function patch(key: keyof CompanySettingsUpdateInput, value: string | number | null) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setSaved(false);
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setErr(null);
+    setSaved(false);
+    try {
+      // Convert empty strings back to null for nullable fields
+      const payload: CompanySettingsUpdateInput = {
+        ...form,
+        siret: form.siret || null,
+        vat_number: form.vat_number || null,
+        address: form.address || null,
+        email: form.email || null,
+        phone: form.phone || null,
+        legal_mentions: form.legal_mentions || null,
+      };
+      const updated = await api.updateCompanySettings(payload);
+      setSettings(updated);
+      setSaved(true);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Erreur lors de la sauvegarde.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loadingData) {
+    return (
+      <Panel bare className="flex items-center justify-center py-8">
+        <Spinner size={20} />
+        <span className="ml-3 text-[12px] text-text3">Chargement…</span>
+      </Panel>
+    );
+  }
+
+  if (err && !settings) {
+    return (
+      <Panel bare className="px-3.5 py-4">
+        <InlineError message={err} />
+      </Panel>
+    );
+  }
+
+  const tvaPercent =
+    typeof form.default_tva_rate === "number"
+      ? (form.default_tva_rate * 100).toFixed(0)
+      : "20";
+
+  return (
+    <Panel bare>
+      <form onSubmit={(e) => void handleSave(e)}>
+        <div className="grid grid-cols-1 gap-0 divide-y divide-line-soft lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+          {/* left column */}
+          <div className="flex flex-col gap-0 divide-y divide-line-soft">
+            <FormField
+              icon={Building2}
+              label="Nom de l'entreprise"
+              required
+            >
+              <input
+                type="text"
+                value={form.company_name ?? ""}
+                onChange={(e) => patch("company_name", e.target.value)}
+                placeholder="Mon Entreprise BTP"
+                className={fieldCls}
+                required
+              />
+            </FormField>
+            <FormField icon={FileText} label="SIRET">
+              <input
+                type="text"
+                value={form.siret ?? ""}
+                onChange={(e) => patch("siret", e.target.value)}
+                placeholder="000 000 000 00000"
+                className={fieldCls}
+                maxLength={17}
+              />
+            </FormField>
+            <FormField icon={FileText} label="N° TVA intra.">
+              <input
+                type="text"
+                value={form.vat_number ?? ""}
+                onChange={(e) => patch("vat_number", e.target.value)}
+                placeholder="FR00000000000"
+                className={fieldCls}
+              />
+            </FormField>
+            <FormField icon={Percent} label="Taux TVA par défaut">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={tvaPercent}
+                  onChange={(e) => {
+                    const pct = parseFloat(e.target.value);
+                    if (!isNaN(pct)) patch("default_tva_rate", pct / 100);
+                  }}
+                  className={cn(fieldCls, "w-20")}
+                />
+                <span className="text-[12px] text-text3">%</span>
+              </div>
+            </FormField>
+          </div>
+
+          {/* right column */}
+          <div className="flex flex-col gap-0 divide-y divide-line-soft">
+            <FormField icon={Mail} label="E-mail">
+              <input
+                type="email"
+                value={form.email ?? ""}
+                onChange={(e) => patch("email", e.target.value)}
+                placeholder="contact@entreprise.fr"
+                className={fieldCls}
+              />
+            </FormField>
+            <FormField icon={Phone} label="Téléphone">
+              <input
+                type="tel"
+                value={form.phone ?? ""}
+                onChange={(e) => patch("phone", e.target.value)}
+                placeholder="+33 1 00 00 00 00"
+                className={fieldCls}
+              />
+            </FormField>
+            <FormField icon={Building2} label="Adresse">
+              <textarea
+                value={form.address ?? ""}
+                onChange={(e) => patch("address", e.target.value)}
+                placeholder="1 rue des Bâtisseurs, 75001 Paris"
+                rows={2}
+                className={cn(fieldCls, "resize-none")}
+              />
+            </FormField>
+            <FormField icon={FileText} label="Mentions légales">
+              <textarea
+                value={form.legal_mentions ?? ""}
+                onChange={(e) => patch("legal_mentions", e.target.value)}
+                placeholder="Capital social : …"
+                rows={3}
+                className={cn(fieldCls, "resize-none")}
+              />
+            </FormField>
+          </div>
+        </div>
+
+        {/* footer */}
+        <div className="flex items-center gap-3 border-t border-line-soft px-3.5 py-3">
+          {err && (
+            <span className="flex items-center gap-1.5 text-[12px] text-stop">
+              <AlertTriangle size={13} strokeWidth={2.2} aria-hidden />
+              {err}
+            </span>
+          )}
+          {saved && !err && (
+            <span className="flex items-center gap-1.5 text-[12px] text-ok">
+              <Check size={13} strokeWidth={2.5} aria-hidden />
+              Sauvegardé
+            </span>
+          )}
+          <button
+            type="submit"
+            disabled={saving}
+            className="disp ml-auto flex items-center gap-2 rounded-[8px] border border-amber-line bg-amber-bg px-3.5 py-2 text-[12px] font-semibold tracking-[0.04em] text-amber-2 transition-colors hover:bg-amber-line disabled:opacity-50"
+          >
+            {saving ? (
+              <Spinner size={14} />
+            ) : (
+              <Save size={14} strokeWidth={2.2} aria-hidden />
+            )}
+            Enregistrer
+          </button>
+        </div>
+      </form>
+    </Panel>
+  );
+}
+
+const fieldCls =
+  "w-full rounded-[6px] border border-line bg-bg-2 px-2.5 py-1.5 text-[12.5px] text-text placeholder:text-text3 focus:border-amber-line focus:outline-none";
+
+function FormField({
+  icon: Icon,
+  label,
+  required,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-3 px-3.5 py-3">
+      <div className="mt-1 flex-none">
+        <Icon size={14} strokeWidth={2} className="text-text3" aria-hidden />
+      </div>
+      <div className="flex flex-1 flex-col gap-1 min-w-0">
+        <label className="text-[11px] font-medium text-text2">
+          {label}
+          {required && <span className="ml-0.5 text-amber-2">*</span>}
+        </label>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* LLM config panel — read-only display of providers + default.        */
+/* ------------------------------------------------------------------ */
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  google: "Google",
+};
+
+const PROVIDER_MODELS: Record<string, string> = {
+  anthropic: "claude-opus-4.8",
+  openai: "GPT-4o",
+  google: "Gemini 1.5 Pro",
+};
+
+function LLMConfigPanel() {
+  const [config, setConfig] = useState<LLMConfig | null>(null);
+  const [loadingData, setLoadingData] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .getLlmConfig()
+      .then(setConfig)
+      .catch((e: unknown) =>
+        setErr(
+          e instanceof Error ? e.message : "Impossible de charger la config LLM.",
+        ),
+      )
+      .finally(() => setLoadingData(false));
+  }, []);
+
+  if (loadingData) {
+    return (
+      <Panel bare className="flex items-center justify-center py-8">
+        <Spinner size={20} />
+        <span className="ml-3 text-[12px] text-text3">Chargement…</span>
+      </Panel>
+    );
+  }
+
+  if (err || !config) {
+    return (
+      <Panel bare className="px-3.5 py-4">
+        <InlineError message={err ?? "Données indisponibles."} />
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel bare>
+      {/* default provider banner */}
+      <div className="flex items-center gap-3 border-b border-line-soft px-3.5 py-3">
+        <Sparkles size={14} strokeWidth={2} className="flex-none text-amber-2" aria-hidden />
+        <span className="text-[12px] text-text2">Fournisseur par défaut</span>
+        <span className="ml-auto disp rounded-[5px] border border-amber-line bg-amber-bg px-[9px] py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-amber-2">
+          {PROVIDER_LABELS[config.default_provider] ?? config.default_provider}
+        </span>
+      </div>
+
+      {/* provider rows */}
+      {config.providers.map((p, i) => {
+        const label = PROVIDER_LABELS[p.name] ?? p.name;
+        const modelLabel = p.default_model || (PROVIDER_MODELS[p.name] ?? p.default_model);
+        const isDefault = p.name === config.default_provider;
+        const isLast = i === config.providers.length - 1;
+
+        return (
+          <div
+            key={p.name}
+            className={cn(
+              "flex items-center gap-3 px-3.5 py-3",
+              !isLast && "border-b border-line-soft",
+            )}
+          >
+            <div
+              className={cn(
+                "grid h-[30px] w-[30px] flex-none place-items-center rounded-[7px] border text-[11px] font-bold",
+                p.available
+                  ? "border-ok-bg bg-ok-bg text-ok"
+                  : "border-line bg-bg-3 text-text3",
+              )}
+              aria-hidden
+            >
+              {label.slice(0, 2).toUpperCase()}
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[12.5px] font-medium text-text">{label}</span>
+                {isDefault && (
+                  <span className="disp rounded-[4px] border border-amber-line bg-amber-bg px-[6px] py-px text-[9px] font-semibold uppercase tracking-[0.1em] text-amber-2">
+                    Défaut
+                  </span>
+                )}
+              </div>
+              <span className="mono text-[11px] text-text3">{modelLabel}</span>
+            </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <StateDot
+                ok={p.available}
+                okLabel="Clé présente"
+                koLabel="Clé absente"
+                koTone="amber"
+              />
+            </div>
+          </div>
+        );
+      })}
+
+      <div className="border-t border-line-soft px-3.5 py-2.5">
+        <span className="mono text-[10.5px] text-text3">
+          Configurez les clés via les variables d&apos;environnement backend (ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY).
+        </span>
+      </div>
+    </Panel>
   );
 }
 

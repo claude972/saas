@@ -216,14 +216,26 @@ async def process_command(command_id: uuid.UUID) -> None:
         )
 
         # 4. Run the agent --------------------------------------------------
+        provider = getattr(agent_row, "provider", "anthropic") or "anthropic"
+        model = getattr(agent_row, "model", None)
+        skill_slugs: list[str] = (
+            (agent_row.config or {}).get("skills", [])
+            if agent_row.config
+            else []
+        )
+        skills_text = await resolve_skills(db, skill_slugs)
+
         agent_input = {
             "instruction": command.instruction,
             "intent": intent,
             "project_id": str(command.project_id) if command.project_id else None,
             "command_id": str(command.id),
+            "provider": provider,
+            "model": model,
+            "skills_text": skills_text,
         }
         try:
-            agent = registry.get(slug)
+            agent = registry.build_agent(agent_row)
             result = await agent.run(agent_input)
             if not isinstance(result, dict):
                 result = {"raw": result}
@@ -354,3 +366,43 @@ async def _get_agent_by_slug(db: AsyncSession, slug: str) -> Agent | None:
     """Fetch the registered :class:`Agent` row for a slug, or ``None``."""
     result = await db.execute(select(Agent).where(Agent.slug == slug))
     return result.scalar_one_or_none()
+
+
+async def resolve_skills(db: AsyncSession, slugs: list[str]) -> str:
+    """Return the concatenated instructions for a list of skill slugs.
+
+    Loads each :class:`~models.Skill` by slug and joins their ``instructions``
+    fields with a double newline separator. Slugs that do not exist or belong
+    to disabled skills are silently skipped.
+
+    Returns an empty string when *slugs* is empty or the Skill table is not
+    yet present in the database (graceful degradation during migrations).
+    """
+    if not slugs:
+        return ""
+
+    try:
+        # Import here to avoid a hard dependency before the Skill table exists.
+        from models import Skill  # noqa: PLC0415
+
+        rows_result = await db.execute(
+            select(Skill).where(
+                Skill.slug.in_(slugs),
+                Skill.enabled.is_(True),
+            )
+        )
+        rows = rows_result.scalars().all()
+        if not rows:
+            return ""
+
+        # Preserve the order requested by the caller.
+        slug_to_row = {row.slug: row for row in rows}
+        parts: list[str] = []
+        for slug in slugs:
+            row = slug_to_row.get(slug)
+            if row and row.instructions:
+                parts.append(row.instructions)
+
+        return "\n\n".join(parts)
+    except Exception:  # noqa: BLE001 — Skill table may not exist yet
+        return ""

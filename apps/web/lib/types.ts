@@ -5,6 +5,10 @@
 
 // ---------- Enums (string literals, mirror backend enums.py) ----------
 
+export type LLMProvider = "anthropic" | "openai" | "google";
+
+export type SkillSource = "maison" | "anthropic";
+
 export type RiskLevel = "low" | "medium" | "high" | "blocked";
 
 export type TaskStatus =
@@ -102,6 +106,8 @@ export interface Agent {
   status: string;
   enabled: boolean;
   risk_level: RiskLevel;
+  provider: string;
+  model?: string | null;
   config?: JsonObject | null;
   input_schema?: JsonObject | null;
   output_schema?: JsonObject | null;
@@ -203,8 +209,12 @@ export interface UpdateAgentInput {
   name?: string;
   role?: string;
   description?: string | null;
+  version?: string;
+  risk_level?: RiskLevel | string;
   enabled?: boolean;
   status?: string;
+  provider?: string;
+  model?: string | null;
   config?: JsonObject | null;
 }
 
@@ -219,3 +229,110 @@ export interface UpdateTaskInput {
 export interface ApprovalDecisionInput {
   note?: string;
 }
+
+// ---------- Skill ----------
+
+export interface Skill {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  source: SkillSource | string;
+  instructions?: string | null;
+  anthropic_skill_id?: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillCreateInput {
+  name: string;
+  slug: string;
+  description?: string | null;
+  source?: SkillSource | string;
+  instructions?: string | null;
+  anthropic_skill_id?: string | null;
+}
+
+export interface SkillUpdateInput {
+  name?: string;
+  description?: string | null;
+  source?: SkillSource | string;
+  instructions?: string | null;
+  anthropic_skill_id?: string | null;
+  enabled?: boolean;
+}
+
+// ---------- Company settings ----------
+
+export interface CompanySettings {
+  id: string;
+  company_name: string;
+  siret?: string | null;
+  vat_number?: string | null;
+  address?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  logo_url?: string | null;
+  legal_mentions?: string | null;
+  default_tva_rate: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanySettingsUpdateInput {
+  company_name?: string;
+  siret?: string | null;
+  vat_number?: string | null;
+  address?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  logo_url?: string | null;
+  legal_mentions?: string | null;
+  default_tva_rate?: number;
+}
+
+// ---------- LLM config ----------
+
+export interface LLMProviderInfo {
+  name: LLMProvider | string;
+  available: boolean;
+  default_model: string;
+}
+
+export interface LLMConfig {
+  default_provider: LLMProvider | string;
+  providers: LLMProviderInfo[];
+}
+
+// ---------- OpenClaw status ----------
+
+export interface OpenClawStatus {
+  connected: boolean;
+  last_seen: string | null;
+  model_info?: JsonObject | null;
+}
+
+// ---------- Agent creation ----------
+
+export interface CreateAgentInput {
+  name: string;
+  slug: string;
+  role: string;
+  description?: string | null;
+  provider?: string;
+  model?: string | null;
+  config?: JsonObject | null;
+  input_schema?: JsonObject | null;
+  output_schema?: JsonObject | null;
+}
+
+// ---------- Document update ----------
+
+export interface UpdateDocumentInput {
+  content?: JsonObject | null;
+  title?: string;
+  status?: DocumentStatus | string;
+}
+
+export type ExportFormat = "pdf" | "docx" | "xlsx";

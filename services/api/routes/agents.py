@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.registry import registry
+from agents.registry import build_agent, registry
 from core import risk_engine
 from core.approval_engine import create_approval
 from core.audit_logger import log_event
@@ -95,9 +95,12 @@ async def _run_agent_task(task_id: uuid.UUID, agent_id: uuid.UUID, slug: str) ->
             "project_id": str(task.project_id) if task.project_id else None,
             "command_id": None,
             "manual": True,
+            "provider": agent_row.provider or "anthropic",
+            "model": agent_row.model,
+            "skills_text": "",
         }
         try:
-            agent = registry.get(slug)
+            agent = build_agent(agent_row)
             result = await agent.run(agent_input)
             if not isinstance(result, dict):
                 result = {"raw": result}
@@ -241,7 +244,11 @@ async def create_agent(
             detail=f"Un agent avec le slug '{payload.slug}' existe deja.",
         )
 
-    agent = Agent(**payload.model_dump())
+    data = payload.model_dump()
+    # Agents whose slug is not a hard-coded registered class are always custom.
+    if not registry.is_registered(data.get("slug", "")) and data.get("agent_type") is None:
+        data["agent_type"] = "custom"
+    agent = Agent(**data)
     db.add(agent)
     await db.commit()
     await db.refresh(agent)
@@ -328,7 +335,8 @@ async def run_agent(
             detail=f"Agent desactive: {agent.slug}.",
         )
 
-    if agent.slug not in registry._agents:  # noqa: SLF001 - registry has no membership API
+    # Hard-coded agents must be in the registry; custom agents are always allowed.
+    if agent.agent_type != "custom" and not registry.is_registered(agent.slug):
         await log_event(
             db,
             event_type="agent.run_rejected",

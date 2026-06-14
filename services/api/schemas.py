@@ -22,7 +22,9 @@ from enums import (
     ApprovalStatus,
     CommandStatus,
     DocumentStatus,
+    LLMProvider,
     RiskLevel,
+    SkillSource,
     TaskStatus,
 )
 
@@ -125,6 +127,8 @@ class AgentCreate(BaseModel):
     config: dict | None = None
     input_schema: dict | None = None
     output_schema: dict | None = None
+    provider: str = LLMProvider.ANTHROPIC.value
+    model: str | None = None
 
 
 class AgentUpdate(BaseModel):
@@ -139,6 +143,8 @@ class AgentUpdate(BaseModel):
     config: dict | None = None
     input_schema: dict | None = None
     output_schema: dict | None = None
+    provider: str | None = None
+    model: str | None = None
 
 
 class AgentRead(BaseModel):
@@ -157,6 +163,8 @@ class AgentRead(BaseModel):
     config: dict | None = None
     input_schema: dict | None = None
     output_schema: dict | None = None
+    provider: str
+    model: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -266,11 +274,9 @@ class DocumentCreate(BaseModel):
 
 
 class DocumentUpdate(BaseModel):
-    document_type: str | None = None
-    title: str | None = None
-    file_path: str | None = None
     content: dict | None = None
-    status: DocumentStatus | None = None
+    title: str | None = None
+    status: str | None = None
 
 
 class DocumentRead(BaseModel):
@@ -322,3 +328,81 @@ class LogRead(BaseModel):
     message: str
     payload: dict | None = None
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Skill
+# ---------------------------------------------------------------------------
+class SkillCreate(BaseModel):
+    name: str
+    slug: str
+    description: str | None = None
+    source: str = SkillSource.MAISON.value
+    instructions: str | None = None
+    anthropic_skill_id: str | None = None
+    enabled: bool = True
+
+
+class SkillUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    source: str | None = None
+    instructions: str | None = None
+    anthropic_skill_id: str | None = None
+    enabled: bool | None = None
+
+
+class SkillRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    slug: str
+    description: str | None = None
+    source: str
+    instructions: str | None = None
+    anthropic_skill_id: str | None = None
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# CompanySettings
+# ---------------------------------------------------------------------------
+class CompanySettingsUpdate(BaseModel):
+    company_name: str | None = None
+    siret: str | None = None
+    vat_number: str | None = None
+    address: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    logo_url: str | None = None
+    legal_mentions: str | None = None
+    default_tva_rate: float | None = None
+
+
+class CompanySettingsRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    company_name: str
+    siret: str | None = None
+    vat_number: str | None = None
+    address: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    logo_url: str | None = None
+    legal_mentions: str | None = None
+    default_tva_rate: float
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# OpenClaw status (Vague 6)
+# ---------------------------------------------------------------------------
+class OpenClawStatus(BaseModel):
+    connected: bool
+    last_seen: datetime | None = None
+    model_info: dict | None = None

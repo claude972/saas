@@ -7,6 +7,8 @@ import {
   Camera,
   ChevronRight,
   ClipboardList,
+  Edit3,
+  Eye,
   FileSearch,
   FileText,
   Inbox,
@@ -26,6 +28,9 @@ import { Panel } from "@/components/ui/Panel";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { Spinner } from "@/components/ui/Spinner";
+import { QuoteEditor } from "@/components/documents/QuoteEditor";
+import { ReportEditor } from "@/components/documents/ReportEditor";
+import { ExportBar } from "@/components/documents/ExportBar";
 
 /* ------------------------------------------------------------------ */
 /* constants & helpers                                                */
@@ -36,6 +41,14 @@ const POLL_MS = 3000;
 // Documents attached to in-flight work can still flip status server-side,
 // so we keep polling while any of these are present.
 const LIVE_STATUSES = new Set<DocumentStatus>(["draft", "waiting_approval"]);
+
+// Statuses where editing content is allowed
+const EDITABLE_STATUSES = new Set<DocumentStatus>([
+  "draft",
+  "waiting_approval",
+  "approved",
+  "sent",
+]);
 
 // Métier label + pictogram per document_type produced by the agents.
 const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
@@ -174,6 +187,13 @@ export default function DocumentsPage() {
     return filter ? docs.filter((d) => d.document_type === filter) : docs;
   }, [docs, filter]);
 
+  // Callback from DocumentDetail when the user saves — sync the list row
+  const handleDocSaved = useCallback((updated: AppDocument) => {
+    setDocs((prev) =>
+      prev ? prev.map((d) => (d.id === updated.id ? updated : d)) : prev,
+    );
+  }, []);
+
   async function retry() {
     setError(null);
     setDocs(null);
@@ -269,6 +289,7 @@ export default function DocumentsPage() {
               <DocumentDetail
                 key={selectedId ?? "none"}
                 documentId={selectedId}
+                onSaved={handleDocSaved}
               />
             </section>
           </div>
@@ -478,10 +499,19 @@ function DocumentRow({
 /* detail loader                                                      */
 /* ------------------------------------------------------------------ */
 
-function DocumentDetail({ documentId }: { documentId: string | null }) {
+type DetailMode = "view" | "edit";
+
+function DocumentDetail({
+  documentId,
+  onSaved,
+}: {
+  documentId: string | null;
+  onSaved: (updated: AppDocument) => void;
+}) {
   const [doc, setDoc] = useState<AppDocument | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<DetailMode>("view");
   // Guard against a slow fetch resolving after the user picked another doc.
   const reqRef = useRef(0);
 
@@ -507,10 +537,21 @@ function DocumentDetail({ documentId }: { documentId: string | null }) {
   useEffect(() => {
     if (!documentId) {
       setDoc(null);
+      setMode("view");
       return;
     }
     fetchDoc(documentId);
+    setMode("view");
   }, [documentId, fetchDoc]);
+
+  // When the editor saves, update local doc + propagate to list
+  const handleSaved = useCallback(
+    (updated: AppDocument) => {
+      setDoc(updated);
+      onSaved(updated);
+    },
+    [onSaved],
+  );
 
   if (!documentId) {
     return (
@@ -558,6 +599,8 @@ function DocumentDetail({ documentId }: { documentId: string | null }) {
   if (!doc) return null;
 
   const Icon = typeIcon(doc.document_type);
+  const canEdit = EDITABLE_STATUSES.has(doc.status as DocumentStatus);
+  const isArchived = doc.status === "archived" || doc.status === "rejected";
 
   return (
     <Panel bare className="oc-fade">
@@ -581,20 +624,95 @@ function DocumentDetail({ documentId }: { documentId: string | null }) {
         <StatusChip status={doc.status} className="flex-none" />
       </div>
 
+      {/* mode toggle + export toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-4 py-2.5">
+        {/* view / edit toggle */}
+        {canEdit ? (
+          <div className="flex items-center rounded-[8px] border border-line-soft bg-bg-2 p-[3px]">
+            <ModeButton
+              active={mode === "view"}
+              icon={Eye}
+              label="Aperçu"
+              onClick={() => setMode("view")}
+            />
+            <ModeButton
+              active={mode === "edit"}
+              icon={Edit3}
+              label="Éditer"
+              onClick={() => setMode("edit")}
+            />
+          </div>
+        ) : (
+          <span className="flex items-center gap-1.5 text-[11.5px] text-text3">
+            <Eye size={13} strokeWidth={2} aria-hidden />
+            {isArchived ? "Document archivé / refusé (lecture seule)" : "Aperçu"}
+          </span>
+        )}
+
+        {/* export buttons */}
+        <ExportBar
+          documentId={doc.id}
+          showXlsx={doc.document_type === "quote"}
+        />
+      </div>
+
       {/* body */}
       <div className="px-4 py-4">
-        <DocumentContent
-          documentType={doc.document_type}
-          content={doc.content ?? null}
-        />
+        {mode === "edit" && canEdit ? (
+          doc.document_type === "quote" ? (
+            <QuoteEditor doc={doc} onSaved={handleSaved} />
+          ) : (
+            <ReportEditor doc={doc} onSaved={handleSaved} />
+          )
+        ) : (
+          <>
+            <DocumentContent
+              documentType={doc.document_type}
+              content={doc.content ?? null}
+            />
 
-        {doc.file_path && (
-          <p className="mono mt-4 truncate border-t border-line-soft pt-3 text-[10.5px] text-text3">
-            fichier · {doc.file_path}
-          </p>
+            {doc.file_path && (
+              <p className="mono mt-4 truncate border-t border-line-soft pt-3 text-[10.5px] text-text3">
+                fichier · {doc.file_path}
+              </p>
+            )}
+          </>
         )}
       </div>
     </Panel>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* mode toggle button                                                  */
+/* ------------------------------------------------------------------ */
+
+function ModeButton({
+  active,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 text-[11.5px] font-medium transition-colors",
+        active
+          ? "bg-amber-bg text-amber-2"
+          : "text-text3 hover:text-text2",
+      )}
+    >
+      <Icon size={13} strokeWidth={2.2} aria-hidden />
+      {label}
+    </button>
   );
 }
 

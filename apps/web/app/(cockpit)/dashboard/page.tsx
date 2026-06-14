@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { OpenClawStatus } from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -190,6 +191,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null); // approval id being decided
+  const [ocStatus, setOcStatus] = useState<OpenClawStatus | null>(null);
 
   // keep a ref so the poller reads the freshest data without re-subscribing
   const dataRef = useRef<Bundle>(EMPTY);
@@ -234,6 +236,25 @@ export default function DashboardPage() {
     }, 3000);
     return () => clearInterval(id);
   }, [loadAll]);
+
+  // poll OpenClaw connection status every 15s
+  useEffect(() => {
+    let cancelled = false;
+    async function pollOc() {
+      try {
+        const status = await api.getOpenclawStatus();
+        if (!cancelled) setOcStatus(status);
+      } catch {
+        // keep previous state on error
+      }
+    }
+    void pollOc();
+    const id = setInterval(() => void pollOc(), 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   /* ---------- derived ---------- */
 
@@ -419,7 +440,7 @@ export default function DashboardPage() {
 
         {/* ---- Instrument strip (KPIs) ---- */}
         <section className="oc-fade flex items-stretch overflow-hidden rounded-[11px] border border-line bg-panel">
-          <StripCell label="OpenClaw" live />
+          <StripCell label="OpenClaw" live connected={ocStatus?.connected ?? false} />
           <StripCell label="Projets actifs" value={activeProjects.length} />
           <StripCell
             label="Sous-agents"
@@ -594,6 +615,7 @@ function StripCell({
   suffix,
   tone,
   live = false,
+  connected = false,
   last = false,
 }: {
   label: string;
@@ -601,6 +623,7 @@ function StripCell({
   suffix?: string;
   tone?: "amber" | "ok";
   live?: boolean;
+  connected?: boolean;
   last?: boolean;
 }) {
   return (
@@ -614,10 +637,17 @@ function StripCell({
         {label}
       </span>
       {live ? (
-        <span className="disp flex items-center gap-[7px] text-[14px] font-semibold uppercase tracking-[0.06em] text-ok">
-          <Pulse />
-          Opér.
-        </span>
+        connected ? (
+          <span className="disp flex items-center gap-[7px] text-[14px] font-semibold uppercase tracking-[0.06em] text-ok">
+            <Pulse />
+            Connecté
+          </span>
+        ) : (
+          <span className="disp flex items-center gap-[7px] text-[14px] font-semibold uppercase tracking-[0.06em] text-text3">
+            <span className="h-2 w-2 flex-none rounded-full bg-text3" aria-hidden />
+            Déconnecté
+          </span>
+        )
       ) : (
         <span
           className={cn(

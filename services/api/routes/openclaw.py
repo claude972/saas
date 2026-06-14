@@ -12,25 +12,35 @@ Endpoints (mounted under the ``/openclaw`` prefix):
 * ``POST /command``        — submit a command; returns immediately.
 * ``GET  /commands``       — list recent commands (newest first).
 * ``GET  /commands/{id}``  — fetch a single command.
+* ``POST /heartbeat``      — MCP heartbeat (no auth); upserts openclaw_last_seen.
+* ``GET  /status``         — connectivity status (auth required).
 
-All routes require an authenticated caller via :func:`get_current_user`.
+All command routes require an authenticated caller via :func:`get_current_user`.
+``/heartbeat`` is intentionally unauthenticated so the MCP server can call it
+without managing a session token in the background task.
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings
 from core.command_router import process_command
 from core.security import get_current_user
 from deps import get_db
-from models import OpenClawCommand
-from schemas import OpenClawCommandCreate, OpenClawCommandRead
+from models import OpenClawCommand, SystemState
+from schemas import OpenClawCommandCreate, OpenClawCommandRead, OpenClawStatus
 
 router = APIRouter()
+
+_HEARTBEAT_KEY = "openclaw_last_seen"
+_CONNECTED_THRESHOLD_SECONDS = 60
 
 
 @router.post(
@@ -90,3 +100,79 @@ async def get_command(
             detail="Commande OpenClaw introuvable.",
         )
     return command
+
+
+# ---------------------------------------------------------------------------
+# Vague 6 — heartbeat & status
+# ---------------------------------------------------------------------------
+
+@router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
+async def heartbeat(db: AsyncSession = Depends(get_db)) -> None:
+    """Enregistre l'horodatage du dernier contact OpenClaw (sans authentification).
+
+    Le serveur MCP appelle cet endpoint toutes les 30 secondes depuis une tâche
+    asyncio en arrière-plan. L'absence d'authentification est intentionnelle :
+    il n'y a aucune donnée sensible ici, et imposer un token compliquerait la
+    tâche de fond sans bénéfice de sécurité.
+
+    La ligne ``system_state`` avec ``key='openclaw_last_seen'`` est créée si
+    elle n'existe pas encore (``ON CONFLICT DO UPDATE``).
+    """
+    now_iso = datetime.now(tz=timezone.utc).isoformat()
+
+    stmt = (
+        pg_insert(SystemState)
+        .values(
+            key=_HEARTBEAT_KEY,
+            value={"ts": now_iso},
+            updated_at=datetime.now(tz=timezone.utc),
+        )
+        .on_conflict_do_update(
+            index_elements=["key"],
+            set_={
+                "value": {"ts": now_iso},
+                "updated_at": datetime.now(tz=timezone.utc),
+            },
+        )
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+
+@router.get("/status", response_model=OpenClawStatus)
+async def openclaw_status(
+    db: AsyncSession = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+) -> OpenClawStatus:
+    """Retourne l'état de connectivité d'OpenClaw.
+
+    ``connected`` vaut ``True`` si un heartbeat a été reçu dans les
+    :data:`_CONNECTED_THRESHOLD_SECONDS` dernières secondes.
+
+    ``model_info`` expose le fournisseur LLM par défaut configuré sur le serveur
+    (champ ``default_provider``).
+    """
+    row: SystemState | None = await db.get(SystemState, _HEARTBEAT_KEY)
+
+    last_seen: datetime | None = None
+    connected = False
+
+    if row is not None:
+        ts_raw = (row.value or {}).get("ts")
+        if ts_raw:
+            try:
+                last_seen = datetime.fromisoformat(ts_raw)
+                # Ensure timezone-aware for arithmetic.
+                if last_seen.tzinfo is None:
+                    last_seen = last_seen.replace(tzinfo=timezone.utc)
+                age = (datetime.now(tz=timezone.utc) - last_seen).total_seconds()
+                connected = age < _CONNECTED_THRESHOLD_SECONDS
+            except ValueError:
+                # Malformed timestamp stored in DB — treat as disconnected.
+                last_seen = None
+
+    return OpenClawStatus(
+        connected=connected,
+        last_seen=last_seen,
+        model_info={"default_provider": settings.DEFAULT_LLM_PROVIDER},
+    )

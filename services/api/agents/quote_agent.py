@@ -109,6 +109,11 @@ class QuoteAgent(BaseAgent):
         totals) flagged with ``"stub": true``.
         """
         instruction = str(input_data.get("instruction", "")).strip()
+        provider: str | None = input_data.get("provider") or None
+        model: str | None = input_data.get("model") or None
+        skills_text: str = str(input_data.get("skills_text") or "").strip()
+
+        system = f"{skills_text}\n\n{SYSTEM_PROMPT}" if skills_text else SYSTEM_PROMPT
 
         try:
             user = (
@@ -116,7 +121,12 @@ class QuoteAgent(BaseAgent):
                 "Redige le devis correspondant en respectant le format JSON "
                 "demande. Liste tes hypotheses si des informations manquent."
             )
-            result = await complete_json(system=SYSTEM_PROMPT, user=user)
+            result = await complete_json(
+                system=system,
+                user=user,
+                provider=provider,
+                model=model,
+            )
 
             raw_hypotheses = result.get("hypotheses")
             hypotheses = (

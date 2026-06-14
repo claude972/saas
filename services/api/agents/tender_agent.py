@@ -67,6 +67,11 @@ class TenderAgent(BaseAgent):
         flagged with ``"stub": true``.
         """
         instruction = str(input_data.get("instruction", "")).strip()
+        provider: str | None = input_data.get("provider") or None
+        model: str | None = input_data.get("model") or None
+        skills_text: str = str(input_data.get("skills_text") or "").strip()
+
+        system = f"{skills_text}\n\n{SYSTEM_PROMPT}" if skills_text else SYSTEM_PROMPT
 
         try:
             user = (
@@ -75,7 +80,12 @@ class TenderAgent(BaseAgent):
                 "Liste les pieces a remettre, les criteres, les delais et les "
                 "points de vigilance."
             )
-            result = await complete_json(system=SYSTEM_PROMPT, user=user)
+            result = await complete_json(
+                system=system,
+                user=user,
+                provider=provider,
+                model=model,
+            )
 
             title = (
                 str(result.get("title", "")).strip()

@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     OPENCLAW_MODEL: str = "claude-opus-4-8"
 
+    # LLM — additional providers (Vague 1). Empty string => provider unavailable.
+    OPENAI_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+    DEFAULT_LLM_PROVIDER: str = "anthropic"
+
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
     def _async_dsn(cls, v: str) -> str:

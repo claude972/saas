@@ -36,7 +36,9 @@ from enums import (
     ApprovalStatus,
     CommandStatus,
     DocumentStatus,
+    LLMProvider,
     RiskLevel,
+    SkillSource,
     TaskStatus,
 )
 
@@ -141,6 +143,13 @@ class Agent(Base):
     config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     input_schema: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     output_schema: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=LLMProvider.ANTHROPIC.value,
+        server_default=LLMProvider.ANTHROPIC.value,
+    )
+    model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -341,4 +350,92 @@ class Log(Base):
         nullable=False,
         server_default=func.now(),
         index=True,
+    )
+
+
+class Skill(Base):
+    __tablename__ = "skills"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(
+        String(100), nullable=False, unique=True, index=True
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=SkillSource.MAISON.value,
+        server_default=SkillSource.MAISON.value,
+    )
+    instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    anthropic_skill_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class CompanySettings(Base):
+    """Singleton row — always fetched/upserted via a fixed well-known id."""
+
+    __tablename__ = "company_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    company_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        default="Mon Entreprise BTP",
+        server_default="Mon Entreprise BTP",
+    )
+    siret: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    vat_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    legal_mentions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    default_tva_rate: Mapped[float] = mapped_column(
+        nullable=False, default=0.20, server_default="0.20"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class SystemState(Base):
+    """Key-value store for persistent system state (e.g. openclaw_last_seen)."""
+
+    __tablename__ = "system_state"
+
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )

@@ -13,6 +13,7 @@ import {
   ListTree,
   Settings,
   LogOut,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -29,6 +30,7 @@ const NAV: NavItem[] = [
   { href: "/openclaw", label: "Centre OpenClaw", icon: Terminal },
   { href: "/projects", label: "Projets", icon: Building2 },
   { href: "/agents", label: "Sous-agents", icon: Bot },
+  { href: "/skills", label: "Skills", icon: Sparkles },
   { href: "/tasks", label: "Tâches", icon: ListChecks },
   { href: "/approvals", label: "Validations", icon: ShieldCheck },
   { href: "/documents", label: "Documents", icon: FileText },

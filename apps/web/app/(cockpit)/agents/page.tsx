@@ -11,6 +11,7 @@ import {
   ClipboardList,
   FileSearch,
   Inbox,
+  Plus,
   Receipt,
   RefreshCw,
   type LucideIcon,
@@ -25,7 +26,6 @@ import { cn } from "@/lib/cn";
 
 const POLL_MS = 3000;
 
-/* Map an agent slug to the maquette's pictogram (right-rail "Sous-agents"). */
 const AGENT_ICONS: Record<string, LucideIcon> = {
   photo_analysis_agent: Camera,
   quote_agent: Receipt,
@@ -37,7 +37,6 @@ function iconFor(slug: string): LucideIcon {
   return AGENT_ICONS[slug] ?? Bot;
 }
 
-/* Count active (non-finished) tasks per agent for the dense list pill. */
 function taskCountsByAgent(tasks: readonly Task[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const task of tasks) {
@@ -55,12 +54,10 @@ interface ViewState {
 export default function AgentsPage() {
   const [state, setState] = useState<ViewState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Slug-level guard so a toggle in flight can't be double-fired or polled over.
   const [pendingId, setPendingId] = useState<string | null>(null);
   const pendingRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
-    // Tasks are best-effort: agents must still render if /tasks fails.
     const [agents, tasks] = await Promise.all([
       api.listAgents(),
       api.listTasks().catch((): Task[] => []),
@@ -68,7 +65,6 @@ export default function AgentsPage() {
     return { agents, taskCounts: taskCountsByAgent(tasks) };
   }, []);
 
-  // Initial load.
   useEffect(() => {
     let active = true;
     load()
@@ -88,8 +84,6 @@ export default function AgentsPage() {
     };
   }, [load]);
 
-  // Poll while at least one agent is running. Skip refresh during a toggle so we
-  // don't clobber the optimistic state with a stale snapshot.
   const hasRunning = state?.agents.some((a) => a.status === "running") ?? false;
   useEffect(() => {
     if (!hasRunning) return;
@@ -102,9 +96,7 @@ export default function AgentsPage() {
             setError(null);
           }
         })
-        .catch(() => {
-          /* keep the last good snapshot on transient poll failures */
-        });
+        .catch(() => {});
     }, POLL_MS);
     return () => window.clearInterval(id);
   }, [hasRunning, load]);
@@ -114,7 +106,6 @@ export default function AgentsPage() {
     pendingRef.current = agent.id;
     setPendingId(agent.id);
     const next = !agent.enabled;
-    // Optimistic flip.
     setState((prev) =>
       prev
         ? {
@@ -140,7 +131,6 @@ export default function AgentsPage() {
           : prev,
       );
     } catch (err: unknown) {
-      // Roll back on failure.
       setState((prev) =>
         prev
           ? {
@@ -170,14 +160,23 @@ export default function AgentsPage() {
 
   return (
     <div className="flex flex-col gap-5 p-[18px_22px]">
-      <header className="oc-fade">
-        <h1 className="disp text-[19px] font-semibold tracking-[0.01em]">
-          Sous-agents
-        </h1>
-        <p className="mt-1 text-[12.5px] text-text3">
-          Agents métier pilotés par OpenClaw · activez ou suspendez chaque agent
-          de la flotte.
-        </p>
+      <header className="oc-fade flex items-start justify-between gap-4">
+        <div>
+          <h1 className="disp text-[19px] font-semibold tracking-[0.01em]">
+            Sous-agents
+          </h1>
+          <p className="mt-1 text-[12.5px] text-text3">
+            Agents métier pilotés par OpenClaw · activez ou suspendez chaque
+            agent de la flotte.
+          </p>
+        </div>
+        <Link
+          href="/agents/new"
+          className="disp flex h-[36px] flex-none items-center gap-2 rounded-[9px] bg-amber px-4 text-[12px] font-semibold tracking-[0.04em] text-[var(--amber-fg)] transition-colors hover:bg-amber-2"
+        >
+          <Plus size={15} strokeWidth={2.4} aria-hidden />
+          Nouvel agent
+        </Link>
       </header>
 
       {state && <FleetStrip agents={state.agents} />}
@@ -187,12 +186,7 @@ export default function AgentsPage() {
           title="Flotte d'agents"
           count={state ? state.agents.length : undefined}
           icon={
-            <Bot
-              size={16}
-              strokeWidth={2}
-              className="text-text2"
-              aria-hidden
-            />
+            <Bot size={16} strokeWidth={2} className="text-text2" aria-hidden />
           }
         />
 
@@ -224,7 +218,7 @@ export default function AgentsPage() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Fleet summary strip — parity with the dashboard instrument strip.    */
+/* Fleet summary strip                                                  */
 /* ------------------------------------------------------------------ */
 
 function FleetStrip({ agents }: { agents: readonly Agent[] }) {
@@ -276,7 +270,7 @@ function StripCell({
 }
 
 /* ------------------------------------------------------------------ */
-/* Agent row — dense list item ported from the maquette `.agent-row`.   */
+/* Agent row                                                            */
 /* ------------------------------------------------------------------ */
 
 function AgentRow({
@@ -312,7 +306,7 @@ function AgentRow({
         )}
       </div>
 
-      {/* name + role */}
+      {/* name + role + provider/model */}
       <Link
         href={`/agents/${agent.id}`}
         className="group min-w-0 flex-1"
@@ -326,8 +320,17 @@ function AgentRow({
             {agent.slug}
           </span>
         </div>
-        <div className="mt-0.5 truncate text-[11px] text-text3">
-          {agent.role}
+        <div className="mt-0.5 flex items-center gap-2">
+          <span className="truncate text-[11px] text-text3">{agent.role}</span>
+          {agent.provider && (
+            <>
+              <span className="h-[3px] w-[3px] flex-none rounded-full bg-text3" aria-hidden />
+              <span className="mono flex-none text-[10px] text-text3">
+                {agent.provider}
+                {agent.model ? `/${agent.model}` : ""}
+              </span>
+            </>
+          )}
         </div>
       </Link>
 
@@ -401,7 +404,7 @@ function Toggle({
 }
 
 /* ------------------------------------------------------------------ */
-/* Loading / empty / error states.                                      */
+/* Loading / empty / error states                                       */
 /* ------------------------------------------------------------------ */
 
 function LoadingState() {
@@ -420,15 +423,22 @@ function LoadingState() {
 function EmptyState() {
   return (
     <Panel className="grid place-items-center py-14 text-center">
-      <div className="flex max-w-[320px] flex-col items-center gap-2 text-text3">
+      <div className="flex max-w-[320px] flex-col items-center gap-3 text-text3">
         <Inbox size={26} strokeWidth={1.8} aria-hidden />
         <span className="text-[13px] font-medium text-text2">
           Aucun sous-agent enregistré
         </span>
         <span className="text-[12px]">
-          Les agents sont créés au démarrage du backend. Vérifiez que le seed a
-          bien été exécuté.
+          Les agents natifs sont créés au démarrage du backend. Vous pouvez
+          également créer un agent custom.
         </span>
+        <Link
+          href="/agents/new"
+          className="disp mt-1 flex items-center gap-2 rounded-[8px] bg-amber px-4 py-2 text-[12px] font-semibold tracking-[0.04em] text-[var(--amber-fg)] transition-colors hover:bg-amber-2"
+        >
+          <Plus size={14} strokeWidth={2.4} aria-hidden />
+          Créer un agent
+        </Link>
       </div>
     </Panel>
   );
@@ -465,12 +475,7 @@ function ErrorState({
 function InlineError({ message }: { message: string }) {
   return (
     <div className="mb-2.5 flex items-start gap-2 rounded-[8px] border border-stop-bg bg-stop-bg px-3 py-2.5 text-[12px] text-stop">
-      <AlertTriangle
-        size={14}
-        strokeWidth={2.2}
-        className="mt-px flex-none"
-        aria-hidden
-      />
+      <AlertTriangle size={14} strokeWidth={2.2} className="mt-px flex-none" aria-hidden />
       <span>{message}</span>
     </div>
   );

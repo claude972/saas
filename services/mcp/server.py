@@ -10,7 +10,9 @@ Lancement : python server.py  (stdio, compatible openclaw.json mcp.servers)
 
 from __future__ import annotations
 
+import asyncio
 import os
+from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
@@ -126,9 +128,40 @@ async def _request(
 
 
 # ---------------------------------------------------------------------------
+# Heartbeat — signale la présence d'OpenClaw au cockpit toutes les 30 s
+# ---------------------------------------------------------------------------
+async def _heartbeat_loop() -> None:
+    """Tâche de fond : POST /openclaw/heartbeat toutes les 30 secondes.
+
+    Best-effort : toutes les erreurs réseau ou d'authentification sont
+    ignorées silencieusement afin de ne jamais bloquer le serveur MCP.
+    """
+    while True:
+        try:
+            await _request("POST", "/openclaw/heartbeat", json={})
+        except Exception:
+            pass
+        await asyncio.sleep(30)
+
+
+@asynccontextmanager
+async def _lifespan(server: Any):
+    """Cycle de vie FastMCP : démarre la boucle de heartbeat au lancement."""
+    task = asyncio.create_task(_heartbeat_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Instance FastMCP
 # ---------------------------------------------------------------------------
-mcp = FastMCP("btp-cockpit")
+mcp = FastMCP("btp-cockpit", lifespan=_lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -512,6 +545,28 @@ async def get_document(document_id: str) -> dict:
     - document_id : UUID du document.
     """
     return await _request("GET", f"/documents/{document_id}")
+
+
+@mcp.tool()
+async def update_document(document_id: str, content: dict) -> dict:
+    """Met à jour le contenu d'un document existant (devis, rapport, etc.) via PATCH.
+
+    Utiliser cet outil pour modifier les lignes d'un devis, corriger les
+    informations d'un rapport de chantier ou ajuster n'importe quel champ
+    du contenu JSON d'un document. Le backend recalcule automatiquement les
+    totaux HT/TVA/TTC si le document est de type « quote ».
+
+    Si le document était déjà approuvé ou envoyé, la modification le repasse
+    en « waiting_approval » et crée une nouvelle demande de validation humaine.
+
+    Paramètres :
+    - document_id : UUID du document à modifier.
+    - content     : dict JSON représentant le nouveau contenu du document
+                    (ex. {"lines": [...], "client_name": "Dupont"}).
+
+    Retourne le document mis à jour ou un dict {"error": "..."} en cas d'échec.
+    """
+    return await _request("PATCH", f"/documents/{document_id}", json={"content": content})
 
 
 # ---------------------------------------------------------------------------

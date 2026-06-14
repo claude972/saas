@@ -46,3 +46,14 @@ class CommandStatus(str, Enum):
     WAITING_APPROVAL = "waiting_approval"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class LLMProvider(str, Enum):
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
+    GOOGLE = "google"
+
+
+class SkillSource(str, Enum):
+    MAISON = "maison"
+    ANTHROPIC = "anthropic"

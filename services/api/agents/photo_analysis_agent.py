@@ -71,6 +71,11 @@ class PhotoAnalysisAgent(BaseAgent):
         instruction = input_data.get("instruction", "")
         image_paths = input_data.get("image_paths") or []
         images = _load_images(image_paths)
+        provider: str | None = input_data.get("provider") or None
+        model: str | None = input_data.get("model") or None
+        skills_text: str = str(input_data.get("skills_text") or "").strip()
+
+        system = f"{skills_text}\n\n{SYSTEM_PROMPT}" if skills_text else SYSTEM_PROMPT
 
         user = (
             "Analyse les photos de chantier fournies et redige tes observations.\n"
@@ -84,9 +89,11 @@ class PhotoAnalysisAgent(BaseAgent):
 
         try:
             result = await complete_json(
-                system=SYSTEM_PROMPT,
+                system=system,
                 user=user,
                 images=images or None,
+                provider=provider,
+                model=model,
             )
         except (LLMUnavailable, Exception):  # noqa: BLE001 - stay functional
             return self._stub(instruction, len(images))

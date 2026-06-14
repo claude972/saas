@@ -15,10 +15,12 @@ import {
   Receipt,
   RotateCcw,
   Save,
+  Settings2,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Agent, JsonObject, Task } from "@/lib/types";
+import type { Agent, JsonObject, LLMConfig, RiskLevel, Skill, Task } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Panel } from "@/components/ui/Panel";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -27,10 +29,9 @@ import { StatusChip } from "@/components/ui/StatusChip";
 import { Spinner } from "@/components/ui/Spinner";
 
 /* ------------------------------------------------------------------ */
-/* helpers                                                            */
+/* helpers                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Pick a métier icon for an agent from its slug (parity with maquette). */
 function agentIcon(slug: string): LucideIcon {
   if (slug.includes("photo")) return Camera;
   if (slug.includes("quote")) return Receipt;
@@ -39,7 +40,6 @@ function agentIcon(slug: string): LucideIcon {
   return Bot;
 }
 
-/** Default test instruction per agent, used to pre-fill the "Lancer" box. */
 function defaultInstruction(slug: string): string {
   if (slug.includes("photo"))
     return "Analyse les photos de chantier fournies et décris les travaux visibles.";
@@ -54,6 +54,17 @@ function defaultInstruction(slug: string): string {
 
 const POLL_MS = 3000;
 const RUNNING_STATUSES = new Set(["running", "waiting_approval", "assigned"]);
+
+const RISK_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "low", label: "Faible" },
+  { value: "medium", label: "Moyen" },
+  { value: "high", label: "Élevé" },
+  { value: "blocked", label: "Bloqué" },
+];
+
+// Shared Tailwind classes for form inputs / selects / textareas.
+const INPUT_CLS =
+  "w-full rounded-[9px] border border-line bg-bg-2 px-3.5 py-2.5 text-[13px] leading-relaxed text-text outline-none transition-colors placeholder:text-text3 focus:border-amber-line";
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
@@ -75,18 +86,8 @@ function fmtTime(iso: string): string {
   }).format(d);
 }
 
-/** Pretty-print a config object; empty/absent -> minimal stub for editing. */
-function configToText(config: JsonObject | null | undefined): string {
-  if (config === null || config === undefined) return "{}";
-  try {
-    return JSON.stringify(config, null, 2);
-  } catch {
-    return "{}";
-  }
-}
-
 /* ------------------------------------------------------------------ */
-/* page                                                               */
+/* page                                                                 */
 /* ------------------------------------------------------------------ */
 
 export default function AgentDetailPage() {
@@ -99,7 +100,6 @@ export default function AgentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load agent + its tasks. Reusable for the poll loop.
   const loadAll = useCallback(async () => {
     const [ag, allTasks] = await Promise.all([
       api.getAgent(agentId),
@@ -110,7 +110,6 @@ export default function AgentDetailPage() {
     return ag;
   }, [agentId]);
 
-  // initial load
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -128,7 +127,6 @@ export default function AgentDetailPage() {
     };
   }, [loadAll]);
 
-  // sort newest first; the agent's running tasks drive the poll
   const agentTasks = useMemo(
     () =>
       [...tasks].sort(
@@ -143,18 +141,13 @@ export default function AgentDetailPage() {
     [agentTasks],
   );
 
-  // poll while a task is running / waiting on approval
   useEffect(() => {
     if (!hasLiveTask) return;
     const id = setInterval(() => {
-      loadAll().catch(() => {
-        /* keep the last good state on transient errors */
-      });
+      loadAll().catch(() => {});
     }, POLL_MS);
     return () => clearInterval(id);
   }, [hasLiveTask, loadAll]);
-
-  /* ---------- loading / error / empty ---------- */
 
   if (loading) {
     return (
@@ -194,7 +187,7 @@ export default function AgentDetailPage() {
     <Center>
       <BackLink onClick={() => router.push("/agents")} />
 
-      {/* ===== header band ===== */}
+      {/* header band */}
       <Panel accent className="oc-fade pl-5">
         <div className="flex flex-wrap items-center gap-4">
           <div
@@ -229,6 +222,18 @@ export default function AgentDetailPage() {
                   <span className="mono">{agent.agent_type}</span>
                 </>
               )}
+              {agent.provider && (
+                <>
+                  <Sep />
+                  <span className="mono text-text3">{agent.provider}</span>
+                </>
+              )}
+              {agent.model && (
+                <>
+                  <Sep />
+                  <span className="mono text-text3">{agent.model}</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -250,12 +255,16 @@ export default function AgentDetailPage() {
         )}
       </Panel>
 
-      {/* ===== two-column body ===== */}
+      {/* two-column body */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        {/* --- main column --- */}
+        {/* main column */}
         <div className="flex flex-col gap-5">
           <RunPanel agent={agent} onLaunched={loadAll} />
-          <ConfigPanel agent={agent} onSaved={(next) => setAgent(next)} />
+          <EditPanel
+            key={agent.id + "_" + agent.updated_at}
+            agent={agent}
+            onSaved={(next) => setAgent(next)}
+          />
           <TasksPanel
             tasks={agentTasks}
             live={hasLiveTask}
@@ -263,7 +272,7 @@ export default function AgentDetailPage() {
           />
         </div>
 
-        {/* --- side column --- */}
+        {/* side column */}
         <div className="flex flex-col gap-5">
           <MetadataPanel agent={agent} />
           <SchemaPanel agent={agent} />
@@ -274,7 +283,7 @@ export default function AgentDetailPage() {
 }
 
 /* ------------------------------------------------------------------ */
-/* layout shell                                                       */
+/* layout shell                                                         */
 /* ------------------------------------------------------------------ */
 
 function Center({ children }: { children: React.ReactNode }) {
@@ -300,7 +309,6 @@ function Sep() {
   return <span className="h-[3px] w-[3px] rounded-full bg-text3" aria-hidden />;
 }
 
-/** Dark spinner for use on the amber primary buttons (visible on amber). */
 function ButtonSpinner({ size = 15 }: { size?: number }) {
   return (
     <span
@@ -321,7 +329,7 @@ function ButtonSpinner({ size = 15 }: { size?: number }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* enable / disable toggle                                            */
+/* enable / disable toggle                                              */
 /* ------------------------------------------------------------------ */
 
 function EnableToggle({
@@ -359,7 +367,11 @@ function EnableToggle({
       role="switch"
       aria-checked={agent.enabled}
       aria-label={agent.enabled ? "Désactiver l'agent" : "Activer l'agent"}
-      title={agent.enabled ? "Activé — cliquer pour désactiver" : "Désactivé — cliquer pour activer"}
+      title={
+        agent.enabled
+          ? "Activé — cliquer pour désactiver"
+          : "Désactivé — cliquer pour activer"
+      }
       className={cn(
         "relative h-[18px] w-[32px] flex-none rounded-full transition-colors disabled:opacity-60",
         agent.enabled ? "bg-ok" : "bg-bg-3",
@@ -376,7 +388,7 @@ function EnableToggle({
 }
 
 /* ------------------------------------------------------------------ */
-/* run / "Lancer" panel                                               */
+/* run panel                                                            */
 /* ------------------------------------------------------------------ */
 
 function RunPanel({
@@ -403,7 +415,6 @@ function RunPanel({
         instruction: instruction.trim() || defaultInstruction(agent.slug),
       });
       setLaunched(task);
-      // refresh the agent's task list so the new run shows up + polling kicks in
       await onLaunched();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Lancement impossible.");
@@ -441,12 +452,7 @@ function RunPanel({
 
       {!agent.enabled && (
         <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-text3">
-          <AlertTriangle
-            size={13}
-            strokeWidth={2.2}
-            className="text-amber-2"
-            aria-hidden
-          />
+          <AlertTriangle size={13} strokeWidth={2.2} className="text-amber-2" aria-hidden />
           Agent désactivé — réactivez-le pour pouvoir le lancer.
         </p>
       )}
@@ -455,12 +461,7 @@ function RunPanel({
 
       {launched && (
         <div className="mt-3 flex flex-wrap items-center gap-2.5 rounded-[8px] border border-line-soft bg-bg-2 px-3 py-2.5 text-[12px]">
-          <CheckCircle2
-            size={15}
-            strokeWidth={2.2}
-            className="flex-none text-ok"
-            aria-hidden
-          />
+          <CheckCircle2 size={15} strokeWidth={2.2} className="flex-none text-ok" aria-hidden />
           <span className="text-text2">Tâche créée :</span>
           <span className="truncate text-text">{launched.title}</span>
           <span className="ml-auto flex items-center gap-2">
@@ -492,64 +493,108 @@ function RunPanel({
 }
 
 /* ------------------------------------------------------------------ */
-/* config editor                                                      */
+/* edit panel                                                           */
 /* ------------------------------------------------------------------ */
 
-function ConfigPanel({
+/**
+ * Form editor for agent fields: name, role, description, version,
+ * risk level, LLM provider + model, system prompt, skills.
+ *
+ * The system_prompt textarea is UNCONTROLLED (defaultValue + ref).
+ * This avoids the cursor-reset bug that occurs when a controlled textarea
+ * is re-rendered with the same string value during React reconciliation,
+ * especially when combined with polling that refreshes parent state.
+ */
+function EditPanel({
   agent,
   onSaved,
 }: {
   agent: Agent;
   onSaved: (next: Agent) => void;
 }) {
-  const initial = useMemo(() => configToText(agent.config), [agent.config]);
-  const [text, setText] = useState(initial);
+  // Basic fields — simple controlled inputs, no derived state
+  const [name, setName] = useState(agent.name);
+  const [role, setRole] = useState(agent.role);
+  const [description, setDescription] = useState(agent.description ?? "");
+  const [version, setVersion] = useState(agent.version);
+  const [riskLevel, setRiskLevel] = useState<RiskLevel>(agent.risk_level);
+
+  // LLM provider / model
+  const [provider, setProvider] = useState(agent.provider || "anthropic");
+  const [model, setModel] = useState(agent.model ?? "");
+  const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
+
+  // System prompt — uncontrolled textarea, read via ref at save time
+  const systemPromptRef = useRef<HTMLTextAreaElement>(null);
+  const initialSystemPrompt =
+    typeof agent.config?.system_prompt === "string"
+      ? agent.config.system_prompt
+      : "";
+
+  // Skills
+  const [allSkills, setAllSkills] = useState<Skill[]>([]);
+  const initialSkillSlugs = useMemo<string[]>(() => {
+    const s = agent.config?.skills;
+    if (Array.isArray(s))
+      return s.filter((x): x is string => typeof x === "string");
+    return [];
+  }, [agent.config]);
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>(initialSkillSlugs);
+
+  // Save state
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
 
-  // Keep the editor in sync when the agent reloads (e.g. after save/poll),
-  // unless the user is mid-edit on a dirty buffer.
-  const lastInitial = useRef(initial);
+  // Load LLM config + skills once on mount
   useEffect(() => {
-    if (lastInitial.current !== initial) {
-      lastInitial.current = initial;
-      setText(initial);
-    }
-  }, [initial]);
+    api.getLlmConfig().then(setLlmConfig).catch(() => {});
+    api
+      .listSkills()
+      .then((skills) => setAllSkills(skills.filter((s) => s.enabled)))
+      .catch(() => {});
+  }, []);
 
-  const dirty = text !== initial;
+  const providerInfo = llmConfig?.providers.find((p) => p.name === provider);
+  const modelPlaceholder = providerInfo?.default_model ?? "défaut du fournisseur";
 
-  // live JSON validity for the editor
-  const parsed = useMemo<
-    { ok: true; value: JsonObject } | { ok: false; error: string }
-  >(() => {
-    const trimmed = text.trim();
-    if (trimmed === "") return { ok: true, value: {} };
-    try {
-      const value = JSON.parse(trimmed) as unknown;
-      if (value === null || typeof value !== "object" || Array.isArray(value)) {
-        return { ok: false, error: "La config doit être un objet JSON." };
-      }
-      return { ok: true, value: value as JsonObject };
-    } catch (e) {
-      return {
-        ok: false,
-        error: e instanceof Error ? e.message : "JSON invalide.",
-      };
-    }
-  }, [text]);
+  function toggleSkill(slug: string) {
+    setSelectedSlugs((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug],
+    );
+  }
 
   async function save() {
-    if (busy || !parsed.ok || !dirty) return;
+    if (busy) return;
     setBusy(true);
     setErr(null);
-    setOk(false);
+    setSavedOk(false);
+
+    // Read system prompt from uncontrolled textarea
+    const currentPrompt = systemPromptRef.current?.value ?? initialSystemPrompt;
+
+    // Preserve existing config keys, update only system_prompt + skills
+    const existingConfig: JsonObject = agent.config ?? {};
+    const updatedConfig: JsonObject = {
+      ...existingConfig,
+      system_prompt: currentPrompt,
+      skills: selectedSlugs,
+    };
+
     try {
-      const next = await api.updateAgent(agent.id, { config: parsed.value });
+      const next = await api.updateAgent(agent.id, {
+        name: name.trim() || agent.name,
+        role: role.trim() || agent.role,
+        description: description.trim() || null,
+        version: version.trim() || agent.version,
+        risk_level: riskLevel,
+        provider,
+        model: model.trim() || null,
+        config: updatedConfig,
+      });
       onSaved(next);
-      setOk(true);
-      window.setTimeout(() => setOk(false), 2500);
+      setSavedOk(true);
+      window.setTimeout(() => setSavedOk(false), 2500);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Enregistrement impossible.");
     } finally {
@@ -560,72 +605,173 @@ function ConfigPanel({
   return (
     <Panel bare>
       <div className="flex items-center gap-2 border-b border-line-soft px-4 py-3">
-        <Braces size={15} strokeWidth={2.2} className="text-text2" aria-hidden />
+        <Settings2 size={15} strokeWidth={2.2} className="text-text2" aria-hidden />
         <span className="disp text-[11px] font-semibold uppercase tracking-[0.11em] text-text2">
-          Configuration
+          Éditer l'agent
         </span>
-        <span className="mono ml-auto text-[10.5px] text-text3">JSON</span>
       </div>
 
-      <div className="p-4">
-        <textarea
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setOk(false);
-            setErr(null);
-          }}
-          rows={10}
-          spellCheck={false}
-          className={cn(
-            "mono w-full resize-y rounded-[9px] border bg-[var(--console-bg)] px-3.5 py-3 text-[12px] leading-[1.7] text-text outline-none transition-colors",
-            parsed.ok ? "border-line focus:border-amber-line" : "border-stop/60",
-          )}
-        />
+      <div className="flex flex-col gap-4 p-4">
+        {/* Name + role */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Nom">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={INPUT_CLS}
+              placeholder="Nom de l'agent"
+            />
+          </Field>
+          <Field label="Rôle">
+            <input
+              type="text"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className={INPUT_CLS}
+              placeholder="Ex. : Analyste photo"
+            />
+          </Field>
+        </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          {!parsed.ok && (
-            <span className="flex items-center gap-1.5 text-[11.5px] text-stop">
-              <AlertTriangle size={13} strokeWidth={2.2} aria-hidden />
-              {parsed.error}
-            </span>
-          )}
-          {parsed.ok && err && (
+        {/* Version + risk */}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Version">
+            <input
+              type="text"
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+              className={INPUT_CLS}
+              placeholder="1.0.0"
+            />
+          </Field>
+          <Field label="Niveau de risque">
+            <select
+              value={riskLevel}
+              onChange={(e) => setRiskLevel(e.target.value as RiskLevel)}
+              className={INPUT_CLS}
+            >
+              {RISK_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        {/* Description */}
+        <Field label="Description">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className={cn(INPUT_CLS, "resize-y")}
+            placeholder="Décris le rôle de cet agent…"
+          />
+        </Field>
+
+        {/* Provider + model */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Fournisseur LLM">
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              className={INPUT_CLS}
+            >
+              {llmConfig ? (
+                llmConfig.providers.map((p) => (
+                  <option key={p.name} value={p.name} disabled={!p.available}>
+                    {p.name}
+                    {!p.available ? " (clé manquante)" : ""}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="anthropic">anthropic</option>
+                  <option value="openai">openai</option>
+                  <option value="google">google</option>
+                </>
+              )}
+            </select>
+          </Field>
+          <Field label={`Modèle (vide = ${modelPlaceholder})`}>
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className={INPUT_CLS}
+              placeholder={modelPlaceholder}
+            />
+          </Field>
+        </div>
+
+        {/* System prompt — uncontrolled, no cursor reset */}
+        <Field label="Prompt système">
+          <textarea
+            ref={systemPromptRef}
+            defaultValue={initialSystemPrompt}
+            rows={8}
+            spellCheck={false}
+            className={cn(INPUT_CLS, "mono resize-y py-3 text-[12px] leading-[1.7]")}
+            placeholder="Instruction système envoyée au LLM avant chaque exécution…"
+          />
+        </Field>
+
+        {/* Skills multi-select (pill toggles) */}
+        {allSkills.length > 0 && (
+          <Field label="Skills actifs">
+            <div className="flex flex-wrap gap-2 rounded-[9px] border border-line bg-bg-2 px-3 py-2.5">
+              {allSkills.map((skill) => {
+                const checked = selectedSlugs.includes(skill.slug);
+                return (
+                  <button
+                    key={skill.slug}
+                    type="button"
+                    onClick={() => toggleSkill(skill.slug)}
+                    title={skill.description ?? skill.name}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full px-3 py-1 text-[11.5px] font-medium transition-colors",
+                      checked
+                        ? "bg-amber text-[var(--amber-fg)]"
+                        : "bg-bg-3 text-text2 hover:bg-bg-3 hover:text-text",
+                    )}
+                  >
+                    <Zap size={11} strokeWidth={2.2} aria-hidden />
+                    {skill.name}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedSlugs.length > 0 && (
+              <p className="mt-1.5 text-[11px] text-text3">
+                {selectedSlugs.length} skill
+                {selectedSlugs.length > 1 ? "s" : ""} sélectionné
+                {selectedSlugs.length > 1 ? "s" : ""}
+              </p>
+            )}
+          </Field>
+        )}
+
+        {/* Feedback + save button */}
+        <div className="flex flex-wrap items-center gap-3">
+          {err && (
             <span className="flex items-center gap-1.5 text-[11.5px] text-stop">
               <AlertTriangle size={13} strokeWidth={2.2} aria-hidden />
               {err}
             </span>
           )}
-          {ok && !dirty && (
+          {savedOk && (
             <span className="flex items-center gap-1.5 text-[11.5px] text-ok">
               <CheckCircle2 size={13} strokeWidth={2.2} aria-hidden />
-              Configuration enregistrée.
+              Agent enregistré.
             </span>
           )}
-          {dirty && parsed.ok && !err && (
-            <span className="mono text-[11px] text-text3">
-              Modifications non enregistrées
-            </span>
-          )}
-
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setText(initial);
-                setErr(null);
-                setOk(false);
-              }}
-              disabled={!dirty || busy}
-              className="flex h-[36px] items-center gap-1.5 rounded-[7px] border border-line bg-bg-2 px-3.5 text-[12px] font-medium text-text2 transition-colors hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RotateCcw size={14} strokeWidth={2} aria-hidden />
-              Réinitialiser
-            </button>
+          <div className="ml-auto">
             <button
               type="button"
               onClick={save}
-              disabled={!dirty || !parsed.ok || busy}
+              disabled={busy}
               className="disp flex h-[36px] items-center gap-1.5 rounded-[7px] bg-amber px-4 text-[12px] font-semibold tracking-[0.03em] text-[var(--amber-fg)] transition-colors hover:bg-amber-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? (
@@ -643,7 +789,26 @@ function ConfigPanel({
 }
 
 /* ------------------------------------------------------------------ */
-/* recent tasks                                                       */
+/* field wrapper                                                        */
+/* ------------------------------------------------------------------ */
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="micro">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* recent tasks                                                         */
 /* ------------------------------------------------------------------ */
 
 function TasksPanel({
@@ -674,9 +839,7 @@ function TasksPanel({
 
       {tasks.length === 0 ? (
         <div className="rounded-[11px] border border-line bg-panel px-4 py-10 text-center">
-          <p className="text-[12.5px] text-text2">
-            Aucune tâche pour cet agent.
-          </p>
+          <p className="text-[12.5px] text-text2">Aucune tâche pour cet agent.</p>
           <p className="mt-1 text-[11.5px] text-text3">
             Lancez {agentName} ci-dessus pour générer une première tâche.
           </p>
@@ -733,7 +896,7 @@ function TasksPanel({
 }
 
 /* ------------------------------------------------------------------ */
-/* metadata + schema (side column)                                    */
+/* metadata + schema (side column)                                      */
 /* ------------------------------------------------------------------ */
 
 function MetadataPanel({ agent }: { agent: Agent }) {
@@ -741,6 +904,8 @@ function MetadataPanel({ agent }: { agent: Agent }) {
     { k: "Slug", v: agent.slug, mono: true },
     { k: "Type", v: agent.agent_type ?? "—", mono: true },
     { k: "Version", v: `v${agent.version}`, mono: true },
+    { k: "Fournisseur", v: agent.provider || "—", mono: true },
+    { k: "Modèle", v: agent.model || "défaut", mono: true },
     {
       k: "État",
       v: agent.enabled ? (
@@ -770,12 +935,7 @@ function MetadataPanel({ agent }: { agent: Agent }) {
             className="flex items-center justify-between gap-3 border-b border-line-soft py-2 last:border-b-0"
           >
             <span className="text-[11.5px] text-text3">{r.k}</span>
-            <span
-              className={cn(
-                "truncate text-[11.5px] text-text2",
-                r.mono && "mono",
-              )}
-            >
+            <span className={cn("truncate text-[11.5px] text-text2", r.mono && "mono")}>
               {r.v}
             </span>
           </div>
@@ -821,7 +981,7 @@ function SchemaBlock({ label, value }: { label: string; value: JsonObject }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* error primitives                                                   */
+/* error primitives                                                     */
 /* ------------------------------------------------------------------ */
 
 function InlineError({
@@ -838,12 +998,7 @@ function InlineError({
         className,
       )}
     >
-      <AlertTriangle
-        size={14}
-        strokeWidth={2.2}
-        className="mt-px flex-none"
-        aria-hidden
-      />
+      <AlertTriangle size={14} strokeWidth={2.2} className="mt-px flex-none" aria-hidden />
       <span>{message}</span>
     </div>
   );
@@ -859,12 +1014,7 @@ function ErrorBox({
   return (
     <Panel className="oc-fade">
       <div className="flex flex-col items-center gap-3 py-10 text-center">
-        <AlertTriangle
-          size={26}
-          strokeWidth={2}
-          className="text-stop"
-          aria-hidden
-        />
+        <AlertTriangle size={26} strokeWidth={2} className="text-stop" aria-hidden />
         <p className="text-[13px] text-text2">{message}</p>
         <button
           type="button"

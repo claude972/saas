@@ -8,3 +8,8 @@ pydantic-settings
 pyjwt
 anthropic
 python-multipart
+openai
+google-generativeai
+reportlab
+python-docx
+openpyxl
