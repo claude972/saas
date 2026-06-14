@@ -6,6 +6,7 @@ asyncpg
 pydantic[email]>=2
 pydantic-settings
 pyjwt
+pydantic-ai[anthropic,openai,google]
 anthropic
 python-multipart
 openai

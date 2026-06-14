@@ -43,6 +43,23 @@ class AgentRegistry:
         """Return True when ``slug`` maps to a hard-coded agent class."""
         return slug in self._agents
 
+    def build_agent(self, agent_row) -> BaseAgent:
+        """Factory: return the right BaseAgent instance for a database agent row.
+
+        Mirrors the module-level ``build_agent`` function so the command router
+        can call ``registry.build_agent(row)`` on the shared registry instance.
+        """
+        slug: str = agent_row.slug or ""
+
+        if self.is_registered(slug):
+            return self.get(slug)
+
+        config: dict = agent_row.config or {}
+        provider: str = getattr(agent_row, "provider", None) or "anthropic"
+        model: str | None = getattr(agent_row, "model", None) or None
+
+        return ConfigurableAgent(config=config, provider=provider, model=model)
+
 
 registry = AgentRegistry()
 registry.register(PhotoAnalysisAgent)

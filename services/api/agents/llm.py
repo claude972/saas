@@ -1,12 +1,17 @@
-"""LLM access layer for OpenClaw agents — multi-provider router.
+"""LLM access layer for OpenClaw agents — PydanticAI engine.
 
-Supports three providers: anthropic, openai, google.
-When a provider's API key is absent its adapter raises ``LLMUnavailable``.
+Public API is unchanged from the previous hand-rolled router. Agents call
+``complete_json(...)`` and fall back to a stub on ``LLMUnavailable`` or any
+error; ``command_router`` calls ``classify_intent_llm``; ``routes/settings``
+calls ``provider_available`` / ``available_providers``.
+
+Three providers are supported: anthropic, openai, google. A provider is
+"available" when its API key (from ``config.settings``) is non-empty.
 ``llm_available()`` returns True when at least one provider has a key.
 
-Strict rules for the Anthropic opus-4-8 model: NEVER send temperature,
-top_p, top_k, budget_tokens, or a thinking block. Only model, max_tokens,
-system and messages are passed to ``messages.create``.
+Strict rule for the Anthropic opus-4-8 model: NEVER send temperature, top_p,
+top_k or thinking — only the model, the system prompt, the user message and
+``max_tokens`` are passed through.
 """
 
 from __future__ import annotations
@@ -15,12 +20,15 @@ import base64
 import json
 import os
 
+from pydantic_ai import Agent, BinaryContent
+
+from config import settings
+
 # ---------------------------------------------------------------------------
-# Module-level defaults (read once at import time, identical to the original
-# behaviour for the Anthropic path).
+# Module-level defaults (read once at import time).
 # ---------------------------------------------------------------------------
 
-MODEL = os.getenv("OPENCLAW_MODEL", "claude-opus-4-8")
+MODEL = settings.OPENCLAW_MODEL
 
 _DEFAULT_MODELS: dict[str, str] = {
     "anthropic": MODEL,
@@ -28,38 +36,36 @@ _DEFAULT_MODELS: dict[str, str] = {
     "google": "gemini-1.5-pro",
 }
 
-_DEFAULT_PROVIDER: str = os.getenv("DEFAULT_LLM_PROVIDER", "anthropic")
+_DEFAULT_PROVIDER: str = settings.DEFAULT_LLM_PROVIDER
 
-# Anthropic client (kept exactly as before).
-_anthropic_key: str = os.getenv("ANTHROPIC_API_KEY", "")
-_openai_key: str = os.getenv("OPENAI_API_KEY", "")
-_google_key: str = os.getenv("GOOGLE_API_KEY", "")
+# PydanticAI model-string prefixes per provider. Gemini via API key uses the
+# unified "google:" prefix (GoogleModel), which reads GOOGLE_API_KEY from the
+# environment. The legacy "google-gla:" prefix still resolves but is deprecated
+# in PydanticAI 1.x and removed in v2.0, so we use "google:" directly.
+_PROVIDER_PREFIX: dict[str, str] = {
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "google": "google",
+}
 
-try:
-    from anthropic import AsyncAnthropic as _AsyncAnthropic
+# Provider API keys (from config). Mapping used both for availability checks
+# and to export the keys into the environment for PydanticAI to read.
+_PROVIDER_KEYS: dict[str, str] = {
+    "anthropic": settings.ANTHROPIC_API_KEY,
+    "openai": settings.OPENAI_API_KEY,
+    "google": settings.GOOGLE_API_KEY,
+}
 
-    _anthropic_client = _AsyncAnthropic() if _anthropic_key else None
-except ImportError:
-    _anthropic_client = None
-
-try:
-    from openai import AsyncOpenAI as _AsyncOpenAI
-
-    _openai_client = _AsyncOpenAI(api_key=_openai_key) if _openai_key else None
-except ImportError:
-    _openai_client = None
-
-try:
-    import google.generativeai as _genai  # type: ignore
-
-    if _google_key:
-        _genai.configure(api_key=_google_key)
-        _google_available = True
-    else:
-        _google_available = False
-except ImportError:
-    _genai = None  # type: ignore
-    _google_available = False
+# PydanticAI reads provider credentials from the environment. Export whatever
+# config provides so the keys are visible to the underlying provider SDKs.
+# (We never overwrite a value that is already present and non-empty.)
+for _env_name, _key in (
+    ("ANTHROPIC_API_KEY", _PROVIDER_KEYS["anthropic"]),
+    ("OPENAI_API_KEY", _PROVIDER_KEYS["openai"]),
+    ("GOOGLE_API_KEY", _PROVIDER_KEYS["google"]),
+):
+    if _key and not os.getenv(_env_name):
+        os.environ[_env_name] = _key
 
 
 # ---------------------------------------------------------------------------
@@ -77,15 +83,8 @@ class LLMUnavailable(Exception):
 
 
 def provider_available(provider: str) -> bool:
-    """Return True when *provider* has a configured API key and client."""
-    p = provider.lower()
-    if p == "anthropic":
-        return _anthropic_client is not None
-    if p == "openai":
-        return _openai_client is not None
-    if p == "google":
-        return _google_available
-    return False
+    """Return True when *provider* has a non-empty configured API key."""
+    return bool(_PROVIDER_KEYS.get(provider.lower(), ""))
 
 
 def available_providers() -> list[str]:
@@ -129,114 +128,30 @@ def _resolve_provider_model(
     return resolved_provider, resolved_model
 
 
-# ---------------------------------------------------------------------------
-# Provider adapters (private)
-# ---------------------------------------------------------------------------
+def _model_string(provider: str, model: str) -> str:
+    """Build the PydanticAI ``"<provider>:<model>"`` model identifier."""
+    return f"{_PROVIDER_PREFIX[provider]}:{model}"
 
 
-async def _complete_anthropic(
-    system: str,
+def _build_user_prompt(
     user: str,
     images: list[tuple[str, str]] | None,
-    max_tokens: int,
-    model: str,
-) -> str:
-    """Call the Anthropic Messages API and return the raw text reply."""
-    if _anthropic_client is None:
-        raise LLMUnavailable("ANTHROPIC_API_KEY is not configured.")
+) -> str | list:
+    """Build the PydanticAI user prompt.
 
-    content: list[dict] = []
-    for media_type, b64 in images or []:
-        content.append(
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": media_type,
-                    "data": b64,
-                },
-            }
+    With images, returns a list of ``[text, BinaryContent, ...]``; each image
+    is a ``(media_type, base64_data)`` tuple decoded into raw bytes. Without
+    images, returns the plain text string.
+    """
+    if not images:
+        return user
+
+    prompt: list = [user]
+    for media_type, b64 in images:
+        prompt.append(
+            BinaryContent(data=base64.b64decode(b64), media_type=media_type)
         )
-    content.append({"type": "text", "text": user})
-
-    # Strict: only model, max_tokens, system, messages — no extra params.
-    resp = await _anthropic_client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": content}],
-    )
-
-    return "".join(
-        block.text
-        for block in resp.content
-        if getattr(block, "type", None) == "text"
-    )
-
-
-async def _complete_openai(
-    system: str,
-    user: str,
-    images: list[tuple[str, str]] | None,
-    max_tokens: int,
-    model: str,
-) -> str:
-    """Call the OpenAI Chat Completions API and return the raw text reply."""
-    if _openai_client is None:
-        raise LLMUnavailable("OPENAI_API_KEY is not configured.")
-
-    user_content: list[dict] = []
-    for media_type, b64 in images or []:
-        data_url = f"data:{media_type};base64,{b64}"
-        user_content.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": data_url},
-            }
-        )
-    user_content.append({"type": "text", "text": user})
-
-    resp = await _openai_client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_content},
-        ],
-    )
-
-    return resp.choices[0].message.content or ""
-
-
-async def _complete_google(
-    system: str,
-    user: str,
-    images: list[tuple[str, str]] | None,
-    max_tokens: int,
-    model: str,
-) -> str:
-    """Call the Google Generative AI API and return the raw text reply."""
-    if not _google_available or _genai is None:
-        raise LLMUnavailable("GOOGLE_API_KEY is not configured.")
-
-    genai_model = _genai.GenerativeModel(
-        model_name=model,
-        system_instruction=system,
-    )
-
-    parts: list = []
-    for media_type, b64 in images or []:
-        image_bytes = base64.b64decode(b64)
-        parts.append({"mime_type": media_type, "data": image_bytes})
-    parts.append(user)
-
-    generation_config = _genai.types.GenerationConfig(max_output_tokens=max_tokens)
-    resp = await genai_model.generate_content_async(
-        parts,
-        generation_config=generation_config,
-    )
-
-    return resp.text or ""
+    return prompt
 
 
 # ---------------------------------------------------------------------------
@@ -255,22 +170,31 @@ async def complete_json(
     """Call the LLM and parse a JSON object from its reply.
 
     ``images`` is a list of ``(media_type, base64_data)`` tuples rendered as
-    vision blocks before the text block. On a parse failure the raw text is
-    returned as ``{"raw": text}`` so callers never crash.
+    vision blocks before the text. On a parse failure the raw text is returned
+    as ``{"raw": text}`` so callers never crash.
 
     ``provider`` defaults to the ``DEFAULT_LLM_PROVIDER`` env var (anthropic).
-    ``model`` defaults to the provider's default model.
+    ``model`` defaults to the provider's default model. Raises
+    ``LLMUnavailable`` when the resolved provider has no API key.
     """
     resolved_provider, resolved_model = _resolve_provider_model(provider, model)
 
-    if resolved_provider == "anthropic":
-        text = await _complete_anthropic(system, user, images, max_tokens, resolved_model)
-    elif resolved_provider == "openai":
-        text = await _complete_openai(system, user, images, max_tokens, resolved_model)
-    elif resolved_provider == "google":
-        text = await _complete_google(system, user, images, max_tokens, resolved_model)
-    else:
-        raise LLMUnavailable(f"Unknown provider: {resolved_provider}")
+    if not provider_available(resolved_provider):
+        raise LLMUnavailable(
+            f"{resolved_provider.upper()}_API_KEY is not configured."
+        )
+
+    agent = Agent(
+        _model_string(resolved_provider, resolved_model),
+        system_prompt=system,
+        # Strict: only max_tokens — no temperature / top_p / top_k / thinking.
+        # ``model_settings`` is a TypedDict in PydanticAI; a plain dict is the
+        # documented form and avoids import-path coupling across versions.
+        model_settings={"max_tokens": max_tokens},
+    )
+
+    result = await agent.run(_build_user_prompt(user, images))
+    text = result.output or ""
 
     cleaned = _strip_json_fences(text)
     try:
@@ -302,7 +226,7 @@ async def classify_intent_llm(instruction: str, allowed: list[str]) -> str:
         f"Choisis l'intention la plus appropriee parmi: {allowed_list}."
     )
 
-    # Uses the default provider (same behaviour as before for Anthropic-only setups).
+    # Uses the default provider (same behaviour as before).
     result = await complete_json(system=system, user=user, max_tokens=256)
     intent = result.get("intent")
     if isinstance(intent, str) and intent in allowed:
