@@ -54,8 +54,11 @@ _DEFAULT_TVA = 0.20
 def _recalculate_quote_totals(content: dict) -> dict:
     """Return a copy of *content* with total_ht/total_tva/total_ttc recomputed.
 
-    Line items are expected under the ``lines`` or ``items`` key, each having
-    ``qty`` (or ``quantity``) and ``unit_price`` (or ``price``/``montant``).
+    Each line item (under the ``lines`` or ``items`` key) contributes its
+    explicit per-line ``total_ht`` when present — this is the source of truth
+    written by the quote agent, the QuoteEditor and OpenClaw — and otherwise
+    ``qty`` × unit price. The unit price is read from ``unit_price_ht`` (the
+    canonical field) with ``unit_price``/``price``/``montant`` as aliases.
     The TVA rate defaults to 20 % when not present in the content dict.
     """
     tva_rate = float(content.get("tva_rate") or _DEFAULT_TVA)
@@ -63,9 +66,19 @@ def _recalculate_quote_totals(content: dict) -> dict:
 
     total_ht = 0.0
     for row in raw_lines:
+        if not isinstance(row, dict):
+            continue
+        if row.get("total_ht") is not None:
+            # Trust the per-line total (separators carry total_ht == 0).
+            total_ht += float(row.get("total_ht") or 0)
+            continue
         qty = float(row.get("qty") or row.get("quantity") or 1)
         unit_price = float(
-            row.get("unit_price") or row.get("price") or row.get("montant") or 0
+            row.get("unit_price_ht")
+            or row.get("unit_price")
+            or row.get("price")
+            or row.get("montant")
+            or 0
         )
         total_ht += qty * unit_price
 
