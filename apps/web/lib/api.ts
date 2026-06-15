@@ -12,6 +12,7 @@ import type {
   CreateProjectInput,
   ExportFormat,
   LLMConfig,
+  LlmDefaultUpdateInput,
   LogEntry,
   LoginInput,
   LoginResponse,
@@ -302,6 +303,9 @@ export const api = {
   },
   getLlmConfig(): Promise<LLMConfig> {
     return request<LLMConfig>("/settings/llm");
+  },
+  updateLlmDefault(input: LlmDefaultUpdateInput): Promise<LLMConfig> {
+    return request<LLMConfig>("/settings/llm", { method: "PATCH", body: input });
   },
 
   // ---------- OpenClaw status ----------

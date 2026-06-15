@@ -303,7 +303,13 @@ export interface LLMProviderInfo {
 
 export interface LLMConfig {
   default_provider: LLMProvider | string;
+  default_model: string;
   providers: LLMProviderInfo[];
+}
+
+export interface LlmDefaultUpdateInput {
+  default_provider?: string | null;
+  default_model?: string | null;
 }
 
 // ---------- OpenClaw status ----------

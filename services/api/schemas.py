@@ -380,6 +380,8 @@ class CompanySettingsUpdate(BaseModel):
     logo_url: str | None = None
     legal_mentions: str | None = None
     default_tva_rate: float | None = None
+    default_llm_provider: str | None = None
+    default_llm_model: str | None = None
 
 
 class CompanySettingsRead(BaseModel):
@@ -395,8 +397,17 @@ class CompanySettingsRead(BaseModel):
     logo_url: str | None = None
     legal_mentions: str | None = None
     default_tva_rate: float
+    default_llm_provider: str | None = None
+    default_llm_model: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class LLMDefaultUpdate(BaseModel):
+    """Payload to set the cockpit-wide default LLM (the 'agent chef')."""
+
+    default_provider: str | None = None
+    default_model: str | None = None
 
 
 # ---------------------------------------------------------------------------

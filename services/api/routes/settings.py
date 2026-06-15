@@ -31,6 +31,7 @@ from schemas import (
     ApiSecretUpdate,
     CompanySettingsRead,
     CompanySettingsUpdate,
+    LLMDefaultUpdate,
 )
 from services.crypto import encrypt_secret
 
@@ -93,11 +94,9 @@ async def update_company_settings(
 # LLM settings (read-only)
 # ---------------------------------------------------------------------------
 
-@router.get("/llm")
-async def get_llm_settings(
-    _user: dict = Depends(get_current_user),
-) -> dict:
-    """Retourne la configuration LLM active : fournisseur par défaut et disponibilité de chaque fournisseur."""
+def _llm_config_payload() -> dict:
+    """Build the /settings/llm response: active default + per-provider info."""
+    default_provider, default_model = _llm.default_provider_model()
     providers = [
         {
             "name": name,
@@ -108,9 +107,54 @@ async def get_llm_settings(
         for name in _PROVIDERS
     ]
     return {
-        "default_provider": _DEFAULT_PROVIDER,
+        "default_provider": default_provider,
+        "default_model": default_model,
         "providers": providers,
     }
+
+
+@router.get("/llm")
+async def get_llm_settings(
+    _user: dict = Depends(get_current_user),
+) -> dict:
+    """Config LLM active : fournisseur + modèle par défaut (agent chef) et disponibilité de chaque fournisseur."""
+    return _llm_config_payload()
+
+
+@router.patch("/llm")
+async def update_llm_default(
+    payload: LLMDefaultUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Définit le modèle/fournisseur par défaut du cockpit (l'« agent chef »).
+
+    Persiste le choix dans ``CompanySettings`` et l'applique immédiatement au
+    moteur LLM (hot-reload, sans redémarrage). Champs vides => retour au défaut
+    d'environnement.
+    """
+    company = await _get_or_create_company(db)
+    company.default_llm_provider = (payload.default_provider or "").strip() or None
+    company.default_llm_model = (payload.default_model or "").strip() or None
+    await db.commit()
+    await db.refresh(company)
+
+    _llm.set_default_provider_model(
+        company.default_llm_provider, company.default_llm_model
+    )
+
+    await log_event(
+        db,
+        event_type="llm_default.updated",
+        message="Modèle par défaut (agent chef) mis à jour.",
+        payload={
+            "provider": company.default_llm_provider,
+            "model": company.default_llm_model,
+            "updated_by": user["email"],
+        },
+    )
+
+    return _llm_config_payload()
 
 
 # ---------------------------------------------------------------------------

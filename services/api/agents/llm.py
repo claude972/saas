@@ -48,6 +48,11 @@ _DEFAULT_MODELS: dict[str, str] = {
 
 _DEFAULT_PROVIDER: str = settings.DEFAULT_LLM_PROVIDER
 
+# Cockpit-wide default ("agent chef") — runtime override of the env default,
+# editable from Réglages and loaded from the DB at startup. None => use env.
+_RUNTIME_DEFAULT_PROVIDER: str | None = None
+_RUNTIME_DEFAULT_MODEL: str | None = None
+
 _PROVIDER_MODELS: dict[str, list[str]] = {
     "anthropic": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"],
     "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1", "o1-mini"],
@@ -248,13 +253,45 @@ def _strip_json_fences(text: str) -> str:
     return stripped.strip()
 
 
+_PROVIDERS_TUPLE = ("anthropic", "openai", "google", "deepseek")
+
+
+def set_default_provider_model(provider: str | None, model: str | None) -> None:
+    """Override the cockpit-wide default provider/model (the "agent chef").
+
+    Takes effect immediately: ``complete_json`` / ``classify_intent_llm`` use it
+    whenever a caller passes no explicit provider/model. Pass None/empty to clear
+    the override and fall back to the env default.
+    """
+    global _RUNTIME_DEFAULT_PROVIDER, _RUNTIME_DEFAULT_MODEL
+    p = (provider or "").strip().lower() or None
+    _RUNTIME_DEFAULT_PROVIDER = p if p in _PROVIDERS_TUPLE else None
+    _RUNTIME_DEFAULT_MODEL = (model or "").strip() or None
+
+
+def default_provider_model() -> tuple[str, str]:
+    """Return the active default (provider, model) for the orchestrator/agents."""
+    provider = (_RUNTIME_DEFAULT_PROVIDER or _DEFAULT_PROVIDER).lower()
+    if provider not in _PROVIDERS_TUPLE:
+        provider = "anthropic"
+    model = (
+        _RUNTIME_DEFAULT_MODEL
+        or _DEFAULT_MODELS.get(provider)
+        or _DEFAULT_MODELS["anthropic"]
+    )
+    return provider, model
+
+
 def _resolve_provider_model(
     provider: str | None,
     model: str | None,
 ) -> tuple[str, str]:
     """Resolve (provider, model), filling in defaults where None is passed."""
-    resolved_provider = (provider or _DEFAULT_PROVIDER).lower()
-    if resolved_provider not in ("anthropic", "openai", "google", "deepseek"):
+    if provider is None and model is None:
+        # No explicit choice → use the cockpit-wide default ("agent chef").
+        return default_provider_model()
+    resolved_provider = (provider or _RUNTIME_DEFAULT_PROVIDER or _DEFAULT_PROVIDER).lower()
+    if resolved_provider not in _PROVIDERS_TUPLE:
         resolved_provider = "anthropic"
     resolved_model = model or _DEFAULT_MODELS[resolved_provider]
     return resolved_provider, resolved_model

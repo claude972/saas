@@ -45,6 +45,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/cn";
 import { VeilleSettingsCard } from "@/components/veille/VeilleSettingsCard";
+import { ModelSelector } from "@/components/agents/ModelSelector";
 
 /* /health is a public endpoint and is NOT part of lib/api (which exposes only
    the documented entity methods), so we probe it directly against the same
@@ -547,10 +548,23 @@ function LLMConfigPanel() {
   const [loadingData, setLoadingData] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
+  // Editable "agent chef" default provider/model.
+  const [chiefProvider, setChiefProvider] = useState("anthropic");
+  const [chiefModel, setChiefModel] = useState("");
+  const [savingChief, setSavingChief] = useState(false);
+  const [savedChief, setSavedChief] = useState(false);
+  const [chiefErr, setChiefErr] = useState<string | null>(null);
+
+  function applyConfig(c: LLMConfig) {
+    setConfig(c);
+    setChiefProvider(c.default_provider);
+    setChiefModel(c.default_model);
+  }
+
   useEffect(() => {
     api
       .getLlmConfig()
-      .then(setConfig)
+      .then(applyConfig)
       .catch((e: unknown) =>
         setErr(
           e instanceof Error ? e.message : "Impossible de charger la config LLM.",
@@ -558,6 +572,26 @@ function LLMConfigPanel() {
       )
       .finally(() => setLoadingData(false));
   }, []);
+
+  async function handleSaveChief() {
+    setSavingChief(true);
+    setChiefErr(null);
+    setSavedChief(false);
+    try {
+      const updated = await api.updateLlmDefault({
+        default_provider: chiefProvider,
+        default_model: chiefModel.trim() === "" ? null : chiefModel,
+      });
+      applyConfig(updated);
+      setSavedChief(true);
+    } catch (e: unknown) {
+      setChiefErr(
+        e instanceof Error ? e.message : "Erreur lors de l'enregistrement.",
+      );
+    } finally {
+      setSavingChief(false);
+    }
+  }
 
   if (loadingData) {
     return (
@@ -578,6 +612,75 @@ function LLMConfigPanel() {
 
   return (
     <Panel bare>
+      {/* Éditable : agent chef — modèle par défaut */}
+      <div className="border-b border-line-soft px-3.5 py-3">
+        <div className="mb-2 flex items-center gap-2">
+          <Wand2 size={13} strokeWidth={2} className="flex-none text-amber-2" aria-hidden />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-text2">
+            Agent chef — modèle par défaut
+          </span>
+        </div>
+        <div className="flex flex-wrap items-start gap-2">
+          <select
+            value={chiefProvider}
+            onChange={(e) => {
+              setChiefProvider(e.target.value);
+              setSavedChief(false);
+            }}
+            className="w-auto rounded-[6px] border border-line bg-bg-2 px-2.5 py-1.5 text-[12.5px] text-text focus:border-amber-line focus:outline-none"
+          >
+            {config.providers.map((p) => (
+              <option key={p.name} value={p.name}>
+                {PROVIDER_LABELS[p.name] ?? p.name}
+              </option>
+            ))}
+          </select>
+          <div className="min-w-[200px] flex-1">
+            <ModelSelector
+              models={
+                config.providers.find((p) => p.name === chiefProvider)?.models ?? []
+              }
+              value={chiefModel}
+              onChange={(v) => {
+                setChiefModel(v);
+                setSavedChief(false);
+              }}
+              placeholder="(défaut du fournisseur)"
+              className="w-full rounded-[6px] border border-line bg-bg-2 px-2.5 py-1.5 text-[12.5px] text-text focus:border-amber-line focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            disabled={savingChief}
+            onClick={() => void handleSaveChief()}
+            className="disp flex items-center gap-2 rounded-[8px] border border-amber-line bg-amber-bg px-3.5 py-2 text-[12px] font-semibold tracking-[0.04em] text-amber-2 transition-colors hover:bg-amber-line disabled:opacity-50"
+          >
+            {savingChief ? (
+              <Spinner size={14} />
+            ) : (
+              <Save size={14} strokeWidth={2.2} aria-hidden />
+            )}
+            Enregistrer
+          </button>
+        </div>
+        {chiefErr && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-stop">
+            <AlertTriangle size={12} strokeWidth={2.2} aria-hidden />
+            {chiefErr}
+          </p>
+        )}
+        {savedChief && !chiefErr && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-ok">
+            <Check size={12} strokeWidth={2.5} aria-hidden /> Modèle chef enregistré
+          </p>
+        )}
+        <p className="mt-1.5 text-[10.5px] text-text3">
+          Utilisé par l&apos;orchestrateur et les agents sans modèle explicite.
+          Choisis « Personnalisé… » pour saisir un identifiant exact
+          (ex.&nbsp;deepseek-reasoner).
+        </p>
+      </div>
+
       {/* default provider banner */}
       <div className="flex items-center gap-3 border-b border-line-soft px-3.5 py-3">
         <Sparkles size={14} strokeWidth={2} className="flex-none text-amber-2" aria-hidden />

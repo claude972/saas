@@ -80,6 +80,19 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE tender_offers ADD COLUMN IF NOT EXISTS sectors JSON"
             )
         )
+        # company_settings: default LLM ("agent chef") configurable from Réglages.
+        await conn.execute(
+            text(
+                "ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS "
+                "default_llm_provider VARCHAR(50)"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS "
+                "default_llm_model VARCHAR(255)"
+            )
+        )
 
     # 2b. Operational guard: warn when no dedicated encryption key is set.
     if not settings.SECRETS_ENCRYPTION_KEY:
@@ -110,6 +123,22 @@ async def lifespan(app: FastAPI):
             await load_keys_from_db(session)
     except Exception:  # noqa: BLE001 - never let key loading crash startup
         logger.exception("load_keys_from_db failed; continuing with env keys only.")
+
+    # 4b. Load the cockpit-wide default LLM ("agent chef") from the DB.
+    try:
+        from agents.llm import set_default_provider_model
+        from models import CompanySettings
+
+        async with async_session_maker() as session:
+            row = (
+                await session.execute(select(CompanySettings).limit(1))
+            ).scalar_one_or_none()
+            if row is not None and (row.default_llm_provider or row.default_llm_model):
+                set_default_provider_model(
+                    row.default_llm_provider, row.default_llm_model
+                )
+    except Exception:  # noqa: BLE001 - never let default loading crash startup
+        logger.exception("Default LLM loading failed; continuing with env default.")
 
     # 5. Start the veille background scheduler.
     try:

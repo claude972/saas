@@ -415,6 +415,9 @@ class CompanySettings(Base):
     default_tva_rate: Mapped[float] = mapped_column(
         nullable=False, default=0.20, server_default="0.20"
     )
+    # Cockpit-wide default LLM ("agent chef") — editable from Réglages.
+    default_llm_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    default_llm_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
