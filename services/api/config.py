@@ -4,10 +4,13 @@ Uses pydantic-settings (Pydantic v2). All values have dev-friendly defaults so
 the app boots locally without a populated .env file.
 """
 
+import logging
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_config_logger = logging.getLogger("openclaw.config")
 
 
 class Settings(BaseSettings):
@@ -54,6 +57,15 @@ class Settings(BaseSettings):
 
     # Browser-use scraping (optional heavy dependency). Disabled by default.
     BROWSER_USE_ENABLED: bool = False
+    # LLM model that drives the browser-use agent (navigation/extraction).
+    BROWSER_USE_MODEL: str = "claude-sonnet-4-6"
+
+    # Secrets encryption key (Fernet urlsafe-base64, 32 bytes).
+    # Empty string => key derived from JWT_SECRET at runtime (see services/crypto.py).
+    SECRETS_ENCRYPTION_KEY: str = ""
+
+    # Maximum number of monitored portals extracted concurrently during veille.
+    MAX_CONCURRENT_PORTALS: int = 2
 
     # Secret partagé pour POST /veille/tick (cron externe).
     # Doit être une chaîne non vide en production pour que le tick soit accepté.
@@ -94,3 +106,62 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# ---------------------------------------------------------------------------
+# Production safety warnings — emitted once at import time.
+# These checks run after Settings() so the final resolved values are used.
+# ---------------------------------------------------------------------------
+
+_DEV_JWT_SECRET = "dev-secret-change-me"
+_DEV_ADMIN_PASSWORD = "changeme"
+
+
+def _warn_insecure_defaults() -> None:
+    """Emit loud warnings when security-critical settings hold dev defaults.
+
+    When SECRETS_ENCRYPTION_KEY is empty, the Fernet key is derived from
+    JWT_SECRET (see services/crypto.py).  If JWT_SECRET is still the published
+    dev default, ALL stored API keys and portal passwords are effectively
+    unprotected — the derivation is deterministic and publicly known.
+
+    ADMIN_PASSWORD='changeme' gives unauthenticated admin access to anyone who
+    reads this file or the public repository.
+
+    These warnings are intentionally loud (WARNING level, repeated lines) so
+    they appear in Railway / Heroku log streams even without a log aggregator.
+    """
+    if settings.JWT_SECRET == _DEV_JWT_SECRET and not settings.SECRETS_ENCRYPTION_KEY:
+        _config_logger.warning(
+            "SECURITE — JWT_SECRET est toujours la valeur par defaut de developpement "
+            "('%s') ET SECRETS_ENCRYPTION_KEY est vide. "
+            "Toutes les cles API et mots de passe de portails chiffres en base sont "
+            "derives de cette valeur publiquement connue — equivalent a du texte clair. "
+            "Definissez SECRETS_ENCRYPTION_KEY avec une cle Fernet dediee en production "
+            "(python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"). "
+            "Changer JWT_SECRET sans definir SECRETS_ENCRYPTION_KEY invalide silencieusement "
+            "tous les secrets stockes.",
+            _DEV_JWT_SECRET,
+        )
+        _config_logger.warning(
+            "SECURITE — ACTION REQUISE : definissez SECRETS_ENCRYPTION_KEY en production."
+        )
+
+    if settings.JWT_SECRET == _DEV_JWT_SECRET:
+        _config_logger.warning(
+            "SECURITE — JWT_SECRET est toujours '%s'. "
+            "Tous les tokens JWT emis sont signables par n'importe qui connaissant "
+            "ce depot. Definissez JWT_SECRET avec une valeur aleatoire en production.",
+            _DEV_JWT_SECRET,
+        )
+
+    if settings.ADMIN_PASSWORD == _DEV_ADMIN_PASSWORD:
+        _config_logger.warning(
+            "SECURITE — ADMIN_PASSWORD est toujours '%s'. "
+            "Le compte administrateur est accessible avec un mot de passe public. "
+            "Definissez ADMIN_PASSWORD avec un mot de passe fort en production.",
+            _DEV_ADMIN_PASSWORD,
+        )
+
+
+_warn_insecure_defaults()

@@ -1,6 +1,7 @@
 import { getToken } from "@/lib/auth";
 import type {
   Agent,
+  ApiSecretInfo,
   AppDocument,
   Approval,
   ApprovalDecisionInput,
@@ -14,6 +15,8 @@ import type {
   LogEntry,
   LoginInput,
   LoginResponse,
+  MonitoredSource,
+  MonitoredSourceInput,
   OpenClawCommand,
   OpenClawStatus,
   Project,
@@ -21,11 +24,13 @@ import type {
   Skill,
   SkillCreateInput,
   SkillUpdateInput,
+  SourcesStatus,
   Task,
   TenderAnalyzeResult,
   TenderOffer,
   TenderOfferUpdateInput,
   UpdateAgentInput,
+  UpdateApiSecretInput,
   UpdateDocumentInput,
   UpdateProjectInput,
   UpdateTaskInput,
@@ -298,12 +303,14 @@ export const api = {
   listTenders(params?: {
     status?: string;
     region?: string;
+    sector?: string;
     source?: string;
     limit?: number;
   }): Promise<TenderOffer[]> {
     const qs = new URLSearchParams();
     if (params?.status) qs.set("status", params.status);
     if (params?.region) qs.set("region", params.region);
+    if (params?.sector) qs.set("sector", params.sector);
     if (params?.source) qs.set("source", params.source);
     if (params?.limit !== undefined) qs.set("limit", String(params.limit));
     const query = qs.toString();
@@ -363,11 +370,18 @@ export const api = {
 
   /**
    * Lance l'analyse IA d'une offre et retourne le document généré (analyse_ao).
+   * opts.mode : "full" (défaut) | "mini" pour un rapport condensé.
    */
-  analyzeTender(id: string, instruction?: string): Promise<TenderAnalyzeResult> {
+  analyzeTender(
+    id: string,
+    opts?: { instruction?: string; mode?: "full" | "mini" },
+  ): Promise<TenderAnalyzeResult> {
+    const body: { instruction?: string; mode?: string } = {};
+    if (opts?.instruction) body.instruction = opts.instruction;
+    if (opts?.mode) body.mode = opts.mode;
     return request<TenderAnalyzeResult>(`/tenders/${id}/analyze`, {
       method: "POST",
-      body: instruction ? { instruction } : {},
+      body,
     });
   },
 
@@ -394,6 +408,104 @@ export const api = {
     return request<VeilleConfig>("/veille/config", {
       method: "PUT",
       body: input,
+    });
+  },
+
+  // ---------- API Secrets (clés LLM chiffrées) ----------
+
+  /**
+   * Retourne le statut des 5 fournisseurs LLM (configurée ou non, indice).
+   * Ne retourne JAMAIS la clé en clair.
+   */
+  getApiSecrets(): Promise<ApiSecretInfo[]> {
+    return request<ApiSecretInfo[]>("/settings/secrets");
+  },
+
+  /**
+   * Enregistre ou met à jour une clé API pour un fournisseur.
+   * La clé est chiffrée côté serveur ; elle n'est jamais renvoyée.
+   */
+  updateApiSecret(input: UpdateApiSecretInput): Promise<ApiSecretInfo> {
+    return request<ApiSecretInfo>("/settings/secrets", {
+      method: "PATCH",
+      body: input,
+    });
+  },
+
+  /**
+   * Supprime la clé d'un fournisseur (204 No Content).
+   */
+  deleteApiSecret(provider: string): Promise<void> {
+    return request<void>(`/settings/secrets/${provider}`, { method: "DELETE" });
+  },
+
+  // ---------- Monitored sources (portails de veille) ----------
+
+  /**
+   * Liste toutes les sources surveillées.
+   * Le mot de passe n'est jamais retourné ; has_password indique sa présence.
+   */
+  listSources(): Promise<MonitoredSource[]> {
+    return request<MonitoredSource[]>("/sources");
+  },
+
+  /**
+   * Récupère une source par son identifiant.
+   */
+  getSource(id: string): Promise<MonitoredSource> {
+    return request<MonitoredSource>(`/sources/${id}`);
+  },
+
+  /**
+   * Crée une nouvelle source surveillée.
+   * login_password est WRITE-ONLY : chiffré côté serveur, jamais renvoyé.
+   */
+  createSource(input: MonitoredSourceInput): Promise<MonitoredSource> {
+    return request<MonitoredSource>("/sources", { method: "POST", body: input });
+  },
+
+  /**
+   * Met à jour partiellement une source.
+   * login_password : re-chiffré uniquement si fourni et non vide.
+   */
+  updateSource(id: string, input: MonitoredSourceInput): Promise<MonitoredSource> {
+    return request<MonitoredSource>(`/sources/${id}`, {
+      method: "PATCH",
+      body: input,
+    });
+  },
+
+  /**
+   * Supprime une source surveillée (204 No Content).
+   */
+  deleteSource(id: string): Promise<void> {
+    return request<void>(`/sources/${id}`, { method: "DELETE" });
+  },
+
+  /**
+   * Retourne la disponibilité de browser-use et l'état de BROWSER_USE_ENABLED.
+   */
+  getSourcesStatus(): Promise<SourcesStatus> {
+    return request<SourcesStatus>("/sources/status");
+  },
+
+  /**
+   * Teste la connexion au portail (login + probe via browser-use).
+   * Si browser-use n'est pas disponible, retourne {ok: false, message: "..."} en 200.
+   */
+  testSource(id: string): Promise<{ ok: boolean; message?: string }> {
+    return request<{ ok: boolean; message?: string }>(`/sources/${id}/test`, {
+      method: "POST",
+    });
+  },
+
+  /**
+   * Déclenche immédiatement une extraction pour cette source.
+   * Retourne le nombre d'offres collectées.
+   */
+  extractSource(id: string): Promise<{ count: number }> {
+    return request<{ count: number }>(`/sources/${id}/extract`, {
+      method: "POST",
     });
   },
 };

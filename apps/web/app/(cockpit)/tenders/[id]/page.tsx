@@ -332,11 +332,16 @@ function AnalyzeSection({
   const hasDoc = !!offer.document_id || !!resultDoc;
   const docId = resultDoc?.id ?? offer.document_id ?? null;
 
+  const [miniAnalyzing, setMiniAnalyzing] = useState(false);
+
   const handleAnalyze = async () => {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      const doc = await api.analyzeTender(offer.id, instruction || undefined);
+      const doc = await api.analyzeTender(offer.id, {
+        instruction: instruction || undefined,
+        mode: "full",
+      });
       setResultDoc(doc);
       // Reflect status change in the parent without a full reload.
       onOfferUpdated({ ...offer, status: "responded", document_id: doc.id });
@@ -344,6 +349,23 @@ function AnalyzeSection({
       setAnalyzeError(err instanceof Error ? err.message : "Erreur lors de l'analyse.");
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const handleMiniAnalyze = async () => {
+    setMiniAnalyzing(true);
+    setAnalyzeError(null);
+    try {
+      const doc = await api.analyzeTender(offer.id, {
+        instruction: instruction || undefined,
+        mode: "mini",
+      });
+      setResultDoc(doc);
+      onOfferUpdated({ ...offer, status: "responded", document_id: doc.id });
+    } catch (err) {
+      setAnalyzeError(err instanceof Error ? err.message : "Erreur lors de l'analyse.");
+    } finally {
+      setMiniAnalyzing(false);
     }
   };
 
@@ -377,7 +399,7 @@ function AnalyzeSection({
               onChange={(e) => setInstruction(e.target.value)}
               placeholder="Ex : Focus sur les contraintes DOM et les lots de second œuvre…"
               rows={3}
-              disabled={analyzing}
+              disabled={analyzing || miniAnalyzing}
               className="w-full resize-none rounded-[7px] border border-line bg-bg-2 px-3 py-2 text-[12.5px] text-text placeholder:text-text3 focus:border-amber-line focus:outline-none disabled:opacity-50"
             />
           </div>
@@ -386,11 +408,11 @@ function AnalyzeSection({
             <p className="text-[12px] text-stop">{analyzeError}</p>
           )}
 
-          <div>
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={() => void handleAnalyze()}
-              disabled={analyzing}
+              disabled={analyzing || miniAnalyzing}
               className="disp inline-flex items-center gap-2 rounded-[7px] bg-amber px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-amber-fg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {analyzing ? (
@@ -402,6 +424,25 @@ function AnalyzeSection({
                 <>
                   <Zap size={14} strokeWidth={2.2} aria-hidden />
                   Analyser cet appel d'offres
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleMiniAnalyze()}
+              disabled={analyzing || miniAnalyzing}
+              className="disp inline-flex items-center gap-2 rounded-[7px] border border-line bg-bg-2 px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-text2 transition-colors hover:border-amber-line hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {miniAnalyzing ? (
+                <>
+                  <Spinner size={14} />
+                  Mini rapport…
+                </>
+              ) : (
+                <>
+                  <Zap size={14} strokeWidth={2.2} aria-hidden />
+                  Mini rapport
                 </>
               )}
             </button>

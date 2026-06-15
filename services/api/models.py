@@ -474,6 +474,7 @@ class TenderOffer(Base):
     )
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     keywords_matched: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    sectors: Mapped[list | None] = mapped_column(JSON, nullable=True)
     raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     dedup_key: Mapped[str | None] = mapped_column(
         String(512), nullable=True, unique=True, index=True
@@ -488,6 +489,81 @@ class TenderOffer(Base):
         nullable=False,
         server_default=func.now(),
         index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class ApiSecret(Base):
+    """Encrypted API keys for LLM providers, managed from the cockpit.
+
+    One row per provider (unique constraint on ``provider``).  The actual key
+    is stored encrypted via Fernet; only a short hint is exposed to the UI.
+    The plaintext key is NEVER stored, logged, or returned to clients.
+    """
+
+    __tablename__ = "api_secrets"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    provider: Mapped[str] = mapped_column(
+        String(50), nullable=False, unique=True, index=True
+    )
+    encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)
+    key_hint: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class MonitoredSource(Base):
+    """Portals watched by the browser-use extraction engine.
+
+    Each row represents one external tender portal.  Credentials are stored
+    encrypted; the plaintext password is NEVER returned to clients or logged.
+    """
+
+    __tablename__ = "monitored_sources"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    login_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    encrypted_password: Mapped[str | None] = mapped_column(Text, nullable=True)
+    region_filters: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    sector_filters: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    extract_interval_minutes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=360, server_default="360"
+    )
+    last_extract_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

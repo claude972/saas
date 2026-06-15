@@ -100,6 +100,7 @@ async def _get_offer_or_404(db: AsyncSession, tender_id: uuid.UUID) -> TenderOff
 async def list_tenders(
     status: str | None = Query(default=None, description="Filtrer par statut (new, seen, analyzing, responded, ignored)"),
     region: str | None = Query(default=None, description="Filtrer par région DOM"),
+    sector: str | None = Query(default=None, description="Filtrer par secteur BTP (slug)"),
     source: str | None = Query(default=None, description="Filtrer par source (perplexity, browser_use, official, manual)"),
     limit: int = Query(default=100, ge=1, le=500, description="Nombre maximum d'offres à retourner"),
     db: AsyncSession = Depends(get_db),
@@ -107,7 +108,7 @@ async def list_tenders(
 ) -> list[TenderOffer]:
     """Liste les appels d'offres, du plus récent au plus ancien.
 
-    Filtres optionnels : ``status``, ``region``, ``source``.
+    Filtres optionnels : ``status``, ``region`` (SQL), ``sector`` (Python post-fetch sur ``sectors``), ``source``.
     """
     stmt = select(TenderOffer)
     if status is not None:
@@ -119,11 +120,18 @@ async def list_tenders(
     stmt = stmt.order_by(TenderOffer.created_at.desc()).limit(limit)
 
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    offers = list(result.scalars().all())
+
+    if sector is not None:
+        offers = [o for o in offers if isinstance(o.sectors, list) and sector in o.sectors]
+
+    return offers
 
 
 @router.get("/new", response_model=list[TenderOfferRead])
 async def list_new_tenders(
+    region: str | None = Query(default=None, description="Filtrer par région DOM"),
+    sector: str | None = Query(default=None, description="Filtrer par secteur BTP (slug)"),
     limit: int = Query(default=50, ge=1, le=500, description="Nombre maximum d'offres à retourner"),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(get_current_user),
@@ -132,15 +140,21 @@ async def list_new_tenders(
 
     Utilisé par OpenClaw (via MCP ``list_new_offers``) pour tirer les nouvelles
     opportunités sans avoir à filtrer côté client.
+
+    Filtres optionnels : ``region`` (SQL) et ``sector`` (Python post-fetch sur ``sectors``).
     """
-    stmt = (
-        select(TenderOffer)
-        .where(TenderOffer.status == "new")
-        .order_by(TenderOffer.created_at.desc())
-        .limit(limit)
-    )
+    stmt = select(TenderOffer).where(TenderOffer.status == "new")
+    if region is not None:
+        stmt = stmt.where(TenderOffer.region == region)
+    stmt = stmt.order_by(TenderOffer.created_at.desc()).limit(limit)
+
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    offers = list(result.scalars().all())
+
+    if sector is not None:
+        offers = [o for o in offers if isinstance(o.sectors, list) and sector in o.sectors]
+
+    return offers
 
 
 @router.post("", response_model=TenderOfferRead, status_code=status.HTTP_201_CREATED)
@@ -267,6 +281,7 @@ async def analyze_tender(
         provider=payload.provider,
         model=payload.model,
         skills_text=skills_text,
+        mode=payload.mode,
     )
 
     # Persist the analysis as a Document.

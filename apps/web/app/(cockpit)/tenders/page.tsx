@@ -6,7 +6,10 @@ import {
   AlertTriangle,
   Building2,
   Calendar,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
+  Database,
   ExternalLink,
   Eye,
   FileText,
@@ -16,11 +19,13 @@ import {
   PlayCircle,
   RefreshCw,
   Search,
+  Tag,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { TenderOffer, TenderStatus } from "@/lib/types";
+import type { TenderOffer, TenderStatus, VeilleConfig } from "@/lib/types";
+import { BTP_SECTORS } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Panel } from "@/components/ui/Panel";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -30,6 +35,15 @@ import { Spinner } from "@/components/ui/Spinner";
 /* ------------------------------------------------------------------ */
 /* constants & helpers                                                 */
 /* ------------------------------------------------------------------ */
+
+/** DOM islands (Guadeloupe, Martinique, Guyane, La Réunion, Mayotte). */
+const DOM_REGIONS = [
+  "Guadeloupe",
+  "Martinique",
+  "Guyane",
+  "La Réunion",
+  "Mayotte",
+];
 
 /** Status filter tabs — order matches the natural lifecycle of an AO. */
 const STATUS_TABS: { value: TenderStatus | null; label: string }[] = [
@@ -99,6 +113,11 @@ function lotsCount(lots: unknown): number | null {
   return null;
 }
 
+/** Look up BTP sector label from slug. */
+function sectorLabel(slug: string): string {
+  return BTP_SECTORS.find((s) => s.slug === slug)?.label ?? slug;
+}
+
 /* ------------------------------------------------------------------ */
 /* page                                                                */
 /* ------------------------------------------------------------------ */
@@ -107,6 +126,8 @@ export default function TendersPage() {
   const [offers, setOffers] = useState<TenderOffer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TenderStatus | null>(null);
+  const [regionFilter, setRegionFilter] = useState<string | null>(null);
+  const [sectorFilter, setSectorFilter] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runningVeille, setRunningVeille] = useState(false);
   const [veilleResult, setVeilleResult] = useState<{
@@ -114,6 +135,14 @@ export default function TendersPage() {
     new_ids: string[];
   } | null>(null);
   const [veilleError, setVeilleError] = useState<string | null>(null);
+
+  // Prompt panel state
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [veilleConfig, setVeilleConfig] = useState<VeilleConfig | null>(null);
+  const [promptDraft, setPromptDraft] = useState<string>("");
+  const [promptSaving, setPromptSaving] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [promptSaved, setPromptSaved] = useState(false);
 
   const load = useCallback(async () => {
     const list = await api.listTenders({ limit: 100 });
@@ -143,14 +172,40 @@ export default function TendersPage() {
     };
   }, [load]);
 
-  // Derived filtered list.
+  // Load veille config when prompt panel opens.
+  useEffect(() => {
+    if (!promptOpen || veilleConfig) return;
+    let alive = true;
+    api
+      .getVeilleConfig()
+      .then((cfg) => {
+        if (!alive) return;
+        setVeilleConfig(cfg);
+        setPromptDraft(cfg.search_prompt ?? "");
+      })
+      .catch(() => {
+        if (!alive) return;
+        setPromptError("Impossible de charger la configuration.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [promptOpen, veilleConfig]);
+
+  // Derived filtered list — status is filtered client-side (already fetched all);
+  // region and sector are also filtered client-side after the full fetch.
   const filtered = useMemo(() => {
     if (!offers) return [];
-    if (!statusFilter) return offers;
-    return offers.filter((o) => o.status === statusFilter);
-  }, [offers, statusFilter]);
+    return offers.filter((o) => {
+      if (statusFilter && o.status !== statusFilter) return false;
+      if (regionFilter && o.region !== regionFilter) return false;
+      if (sectorFilter && !(o.sectors ?? []).includes(sectorFilter))
+        return false;
+      return true;
+    });
+  }, [offers, statusFilter, regionFilter, sectorFilter]);
 
-  // Status counts for tab badges.
+  // Status counts for tab badges (before region/sector filter).
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const o of offers ?? []) {
@@ -224,6 +279,26 @@ export default function TendersPage() {
     }
   }
 
+  async function handleSavePrompt() {
+    setPromptSaving(true);
+    setPromptError(null);
+    setPromptSaved(false);
+    try {
+      const updated = await api.updateVeilleConfig({
+        search_prompt: promptDraft || null,
+      });
+      setVeilleConfig(updated);
+      setPromptSaved(true);
+      setTimeout(() => setPromptSaved(false), 2500);
+    } catch (err: unknown) {
+      setPromptError(
+        err instanceof Error ? err.message : "Erreur lors de la sauvegarde.",
+      );
+    } finally {
+      setPromptSaving(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5 px-[22px] py-[18px]">
       {/* Page header */}
@@ -237,6 +312,16 @@ export default function TendersPage() {
             nouvelles offres sont détectées par Perplexity et analysées par IA.
           </p>
         </div>
+
+        {/* Actions */}
+        <div className="flex flex-none items-center gap-2">
+          <Link
+            href="/tenders/sources"
+            className="disp flex h-[38px] items-center gap-2 rounded-[9px] border border-line-soft bg-bg-2 px-4 text-[12.5px] font-semibold tracking-[0.03em] text-text2 transition-colors hover:border-amber-line hover:text-text"
+          >
+            <Database size={15} strokeWidth={2} aria-hidden />
+            Sources surveillées
+          </Link>
 
         {/* Lancer la veille button */}
         <button
@@ -257,6 +342,7 @@ export default function TendersPage() {
           )}
           {runningVeille ? "Veille en cours…" : "Lancer la veille"}
         </button>
+        </div>
       </header>
 
       {/* Veille result / error feedback */}
@@ -273,6 +359,19 @@ export default function TendersPage() {
           onDismiss={() => setVeilleError(null)}
         />
       )}
+
+      {/* Prompt de recherche — panneau repliable */}
+      <PromptPanel
+        open={promptOpen}
+        onToggle={() => setPromptOpen((v) => !v)}
+        draft={promptDraft}
+        onDraftChange={setPromptDraft}
+        saving={promptSaving}
+        saved={promptSaved}
+        error={promptError}
+        onSave={handleSavePrompt}
+        loading={promptOpen && !veilleConfig && !promptError}
+      />
 
       {/* Stats strip */}
       {offers && offers.length > 0 && <TendersStrip offers={offers} />}
@@ -300,6 +399,14 @@ export default function TendersPage() {
             total={offers.length}
             active={statusFilter}
             onChange={setStatusFilter}
+          />
+
+          {/* Region + sector filters */}
+          <RegionSectorFilters
+            regionFilter={regionFilter}
+            sectorFilter={sectorFilter}
+            onRegionChange={setRegionFilter}
+            onSectorChange={setSectorFilter}
           />
 
           {/* Master / detail layout */}
@@ -371,6 +478,192 @@ export default function TendersPage() {
             </section>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* prompt panel (collapsible)                                         */
+/* ------------------------------------------------------------------ */
+
+function PromptPanel({
+  open,
+  onToggle,
+  draft,
+  onDraftChange,
+  saving,
+  saved,
+  error,
+  onSave,
+  loading,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  draft: string;
+  onDraftChange: (v: string) => void;
+  saving: boolean;
+  saved: boolean;
+  error: string | null;
+  onSave: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="oc-fade rounded-[11px] border border-line bg-panel" style={{ animationDelay: "0.02s" }}>
+      {/* Header / toggle */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-bg-2"
+      >
+        <Search size={14} strokeWidth={2} className="flex-none text-text3" aria-hidden />
+        <span className="disp flex-1 text-[12.5px] font-semibold text-text">
+          Prompt de recherche
+        </span>
+        <span className="text-[11px] text-text3">
+          {open ? (
+            <ChevronUp size={14} strokeWidth={2} aria-hidden />
+          ) : (
+            <ChevronDown size={14} strokeWidth={2} aria-hidden />
+          )}
+        </span>
+      </button>
+
+      {/* Body */}
+      {open && (
+        <div className="border-t border-line-soft px-4 pb-4 pt-3">
+          <p className="mb-2 text-[11.5px] text-text3">
+            Personnalise le prompt envoyé à Perplexity lors de la veille.
+            Vide = prompt par défaut. Variables disponibles :{" "}
+            <code className="mono rounded bg-bg-3 px-1 py-px text-[10.5px]">
+              {"{keywords}"}
+            </code>{" "}
+            <code className="mono rounded bg-bg-3 px-1 py-px text-[10.5px]">
+              {"{regions}"}
+            </code>{" "}
+            <code className="mono rounded bg-bg-3 px-1 py-px text-[10.5px]">
+              {"{limit}"}
+            </code>
+          </p>
+
+          {loading ? (
+            <div className="flex items-center gap-2 py-3 text-[12px] text-text3">
+              <Spinner size={14} />
+              Chargement…
+            </div>
+          ) : (
+            <>
+              <textarea
+                value={draft}
+                onChange={(e) => onDraftChange(e.target.value)}
+                rows={5}
+                placeholder="Laissez vide pour utiliser le prompt par défaut…"
+                className="w-full resize-y rounded-[8px] border border-line bg-bg-2 px-3 py-2.5 text-[12.5px] text-text placeholder:text-text3 focus:border-amber-line focus:outline-none"
+              />
+              {error && (
+                <InlineError
+                  className="mt-2"
+                  message={error}
+                />
+              )}
+              <div className="mt-2.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={saving}
+                  className="disp flex h-[32px] items-center gap-1.5 rounded-[8px] border border-amber-line bg-amber-bg px-3 text-[12px] font-semibold text-amber-2 transition-colors hover:opacity-80 disabled:opacity-60"
+                >
+                  {saving ? <Spinner size={12} /> : null}
+                  {saving ? "Sauvegarde…" : "Sauvegarder"}
+                </button>
+                {saved && (
+                  <span className="text-[11.5px] text-ok">Sauvegardé.</span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* region + sector filters                                            */
+/* ------------------------------------------------------------------ */
+
+function RegionSectorFilters({
+  regionFilter,
+  sectorFilter,
+  onRegionChange,
+  onSectorChange,
+}: {
+  regionFilter: string | null;
+  sectorFilter: string | null;
+  onRegionChange: (v: string | null) => void;
+  onSectorChange: (v: string | null) => void;
+}) {
+  const hasAny = regionFilter !== null || sectorFilter !== null;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      {/* Region select */}
+      <div className="flex items-center gap-1.5">
+        <MapPin size={12} strokeWidth={2} className="flex-none text-text3" aria-hidden />
+        <select
+          value={regionFilter ?? ""}
+          onChange={(e) => onRegionChange(e.target.value || null)}
+          className={cn(
+            "rounded-full border px-3 py-[5px] text-[12px] transition-colors focus:outline-none",
+            regionFilter
+              ? "border-amber-line bg-amber-bg text-amber-2"
+              : "border-line-soft bg-bg-2 text-text2 hover:border-amber-line",
+          )}
+        >
+          <option value="">Toutes les îles</option>
+          {DOM_REGIONS.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Sector select */}
+      <div className="flex items-center gap-1.5">
+        <Tag size={12} strokeWidth={2} className="flex-none text-text3" aria-hidden />
+        <select
+          value={sectorFilter ?? ""}
+          onChange={(e) => onSectorChange(e.target.value || null)}
+          className={cn(
+            "rounded-full border px-3 py-[5px] text-[12px] transition-colors focus:outline-none",
+            sectorFilter
+              ? "border-amber-line bg-amber-bg text-amber-2"
+              : "border-line-soft bg-bg-2 text-text2 hover:border-amber-line",
+          )}
+        >
+          <option value="">Tous les secteurs</option>
+          {BTP_SECTORS.map((s) => (
+            <option key={s.slug} value={s.slug}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Clear filters */}
+      {hasAny && (
+        <button
+          type="button"
+          onClick={() => {
+            onRegionChange(null);
+            onSectorChange(null);
+          }}
+          className="flex items-center gap-1 rounded-full border border-line-soft bg-bg-2 px-2.5 py-[5px] text-[11.5px] text-text3 transition-colors hover:border-stop-bg hover:text-stop"
+        >
+          <XCircle size={11} strokeWidth={2} aria-hidden />
+          Réinitialiser
+        </button>
       )}
     </div>
   );
@@ -504,6 +797,41 @@ function StatusTab({
 }
 
 /* ------------------------------------------------------------------ */
+/* sector badges                                                       */
+/* ------------------------------------------------------------------ */
+
+function SectorBadges({
+  sectors,
+  small = false,
+}: {
+  sectors: string[] | null | undefined;
+  small?: boolean;
+}) {
+  if (!sectors || sectors.length === 0) return null;
+  // Don't display "autre" badge — too noisy.
+  const visible = sectors.filter((s) => s !== "autre");
+  if (visible.length === 0) return null;
+
+  return (
+    <span className="flex flex-wrap gap-1">
+      {visible.map((slug) => (
+        <span
+          key={slug}
+          className={cn(
+            "rounded-full border border-line-soft bg-bg-3 font-medium text-text3",
+            small
+              ? "px-[6px] py-px text-[10px]"
+              : "px-2 py-0.5 text-[11px]",
+          )}
+        >
+          {sectorLabel(slug)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* list row                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -586,6 +914,12 @@ function TenderRow({
             </>
           )}
         </span>
+        {/* Sector badges */}
+        {offer.sectors && offer.sectors.length > 0 && (
+          <span className="mt-1 block">
+            <SectorBadges sectors={offer.sectors} small />
+          </span>
+        )}
       </span>
 
       <TenderStatusChip status={offer.status} />
@@ -761,6 +1095,12 @@ function TenderDetail({
             <span className="h-[3px] w-[3px] rounded-full bg-text3" aria-hidden />
             <span className="mono tnum">{fmtDateTime(offer.created_at)}</span>
           </div>
+          {/* Sector badges in detail header */}
+          {offer.sectors && offer.sectors.length > 0 && (
+            <div className="mt-1.5">
+              <SectorBadges sectors={offer.sectors} />
+            </div>
+          )}
         </div>
         <TenderStatusChip status={offer.status} />
       </div>

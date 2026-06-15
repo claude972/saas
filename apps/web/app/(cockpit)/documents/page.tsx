@@ -1034,11 +1034,52 @@ function PhotoReportContent({ content }: { content: JsonObject }) {
 
 /* ----- analyse AO: synthèse / lots / pièces / critères / délais / contraintes DOM / risques / recommandation ----- */
 
+/* AO lots/critères arrive as dict lists from services/ao_analysis.py
+   ({numero,intitule,montant_estime} / {libelle,ponderation}); flatten to labels. */
+function formatLots(value: JsonValue | undefined): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((it) => {
+      if (typeof it === "string") return it.trim();
+      if (it && typeof it === "object") {
+        const o = it as Record<string, JsonValue>;
+        const numero = o.numero != null ? String(o.numero).trim() : "";
+        const intitule = o.intitule != null ? String(o.intitule).trim() : "";
+        const montant =
+          o.montant_estime != null && String(o.montant_estime).trim()
+            ? ` — ${String(o.montant_estime).trim()}`
+            : "";
+        return `${numero ? `Lot ${numero} : ` : ""}${intitule}${montant}`.trim();
+      }
+      return "";
+    })
+    .filter((s) => s.length > 0);
+}
+
+function formatCriteres(value: JsonValue | undefined): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((it) => {
+      if (typeof it === "string") return it.trim();
+      if (it && typeof it === "object") {
+        const o = it as Record<string, JsonValue>;
+        const libelle = o.libelle != null ? String(o.libelle).trim() : "";
+        const pond =
+          o.ponderation != null && String(o.ponderation).trim()
+            ? ` (${String(o.ponderation).trim()})`
+            : "";
+        return `${libelle}${pond}`.trim();
+      }
+      return "";
+    })
+    .filter((s) => s.length > 0);
+}
+
 function AoAnalysisContent({ content }: { content: JsonObject }) {
   const synthese = asString(content.synthese).trim();
-  const lots = asStringList(content.lots);
+  const lots = formatLots(content.lots);
   const pieces = asStringList(content.pieces_demandees);
-  const criteres = asStringList(content.criteres);
+  const criteres = formatCriteres(content.criteres);
   const delais = asString(content.delais).trim();
   const contraintesDom = asStringList(content.contraintes_dom);
   const risques = asStringList(content.risques);

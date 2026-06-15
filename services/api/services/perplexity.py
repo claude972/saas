@@ -39,6 +39,7 @@ from typing import Any
 
 import httpx
 
+from agents.llm import get_provider_key
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -53,8 +54,12 @@ _REQUEST_TIMEOUT = 60.0  # seconds; Perplexity sonar can be slow on long prompts
 
 
 def perplexity_available() -> bool:
-    """Return True when PERPLEXITY_API_KEY is configured (non-empty)."""
-    return bool(settings.PERPLEXITY_API_KEY)
+    """Return True when a Perplexity API key is configured (non-empty).
+
+    Reads the live in-memory key via get_provider_key (supports hot-reload
+    from the cockpit) with a fallback to the static env-var value.
+    """
+    return bool(get_provider_key("perplexity") or settings.PERPLEXITY_API_KEY)
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +234,9 @@ async def search_tenders(
         logger.debug("Perplexity non configuré (PERPLEXITY_API_KEY vide) — skip.")
         return []
 
+    # Resolve key: hot-reloaded in-memory value takes precedence over env var.
+    api_key = get_provider_key("perplexity") or settings.PERPLEXITY_API_KEY
+
     prompt = _build_prompt(keywords, regions, limit, prompt_template)
 
     payload = {
@@ -250,7 +258,7 @@ async def search_tenders(
     }
 
     headers = {
-        "Authorization": f"Bearer {settings.PERPLEXITY_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
     }

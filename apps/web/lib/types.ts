@@ -369,6 +369,7 @@ export interface TenderOffer {
   status: TenderStatus | string;
   score?: number | null;
   keywords_matched?: string[] | null;
+  sectors?: string[] | null;
   raw?: JsonObject | null;
   dedup_key?: string | null;
   document_id?: string | null;
@@ -428,3 +429,76 @@ export interface VeilleConfigUpdateInput {
 
 // TenderAnalyzeResult is the AppDocument returned by POST /tenders/{id}/analyze.
 export type TenderAnalyzeResult = AppDocument;
+
+// ---------- API secrets (write-only keys — never expose plaintext) ----------
+
+export interface ApiSecretInfo {
+  provider: string;
+  configured: boolean;
+  key_hint?: string | null;
+  updated_by?: string | null;
+  updated_at?: string | null;
+}
+
+/** WRITE-ONLY: api_key is never returned by the server. */
+export interface UpdateApiSecretInput {
+  provider: string;
+  api_key: string;
+}
+
+// ---------- Monitored sources (portal credentials are write-only) ----------
+
+export interface MonitoredSource {
+  id: string;
+  label: string;
+  url: string;
+  login_email?: string | null;
+  /** Server never returns the password — presence is indicated by has_password. */
+  has_password: boolean;
+  region_filters?: string[] | null;
+  sector_filters?: string[] | null;
+  enabled: boolean;
+  extract_interval_minutes: number;
+  last_extract_at?: string | null;
+  last_status?: string | null;
+  last_error?: string | null;
+  last_count?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Used for both create and update payloads. login_password is WRITE-ONLY. */
+export interface MonitoredSourceInput {
+  label?: string;
+  url?: string;
+  login_email?: string | null;
+  /** WRITE-ONLY: never echoed back by the server. */
+  login_password?: string;
+  region_filters?: string[] | null;
+  sector_filters?: string[] | null;
+  extract_interval_minutes?: number;
+  enabled?: boolean;
+}
+
+export interface SourcesStatus {
+  browser_use_available: boolean;
+  enabled: boolean;
+}
+
+// ---------- BTP sectors — shared source of truth (mirrors backend services/sectors.py) ----------
+
+export const BTP_SECTORS: { slug: string; label: string }[] = [
+  { slug: "placo",        label: "Placo / Plâtrerie" },
+  { slug: "electricite",  label: "Électricité" },
+  { slug: "peinture",     label: "Peinture" },
+  { slug: "carrelage",    label: "Carrelage" },
+  { slug: "sol_souple",   label: "Sol souple" },
+  { slug: "menuiserie",   label: "Menuiserie" },
+  { slug: "plomberie",    label: "Plomberie" },
+  { slug: "maconnerie",   label: "Maçonnerie" },
+  { slug: "couverture",   label: "Couverture / Étanchéité" },
+  { slug: "vrd",          label: "VRD / Terrassement" },
+  { slug: "gros_oeuvre",  label: "Gros œuvre" },
+  { slug: "second_oeuvre",label: "Second œuvre" },
+  { slug: "autre",        label: "Autre / Multi-lots" },
+];

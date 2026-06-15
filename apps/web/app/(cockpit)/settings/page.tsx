@@ -13,6 +13,7 @@ import {
   FileText,
   Gauge,
   KeyRound,
+  Lock,
   LogOut,
   Mail,
   Moon,
@@ -25,12 +26,14 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
   Sparkles,
+  Trash2,
   User,
   Wand2,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type {
+  ApiSecretInfo,
   AuthUser,
   CompanySettings,
   CompanySettingsUpdateInput,
@@ -218,8 +221,24 @@ export default function SettingsPage() {
             <LLMConfigPanel />
           </section>
 
-          {/* static UI preferences */}
+          {/* API secrets — write-only key management */}
           <section className="oc-fade" style={{ animationDelay: "0.20s" }}>
+            <SectionHeader
+              title="Clés API"
+              icon={
+                <Lock
+                  size={16}
+                  strokeWidth={2}
+                  className="text-text2"
+                  aria-hidden
+                />
+              }
+            />
+            <ApiSecretsPanel />
+          </section>
+
+          {/* static UI preferences */}
+          <section className="oc-fade" style={{ animationDelay: "0.24s" }}>
             <SectionHeader
               title="Préférences d'affichage"
               icon={
@@ -235,7 +254,7 @@ export default function SettingsPage() {
           </section>
 
           {/* veille appels d'offres */}
-          <section className="oc-fade" style={{ animationDelay: "0.24s" }}>
+          <section className="oc-fade" style={{ animationDelay: "0.28s" }}>
             <SectionHeader
               title="Veille appels d'offres"
               icon={
@@ -621,10 +640,251 @@ function LLMConfigPanel() {
 
       <div className="border-t border-line-soft px-3.5 py-2.5">
         <span className="mono text-[10.5px] text-text3">
-          Configurez les clés via les variables d&apos;environnement backend (ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, DEEPSEEK_API_KEY).
+          Gérez les clés API dans la section &quot;Clés API&quot; ci-dessous.
         </span>
       </div>
     </Panel>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* API secrets panel — write-only key management for 5 providers.       */
+/* ------------------------------------------------------------------ */
+
+const API_SECRET_PROVIDERS: { id: string; label: string }[] = [
+  { id: "anthropic", label: "Anthropic" },
+  { id: "openai",    label: "OpenAI" },
+  { id: "google",    label: "Google" },
+  { id: "deepseek",  label: "DeepSeek" },
+  { id: "perplexity",label: "Perplexity" },
+];
+
+function ApiSecretsPanel() {
+  const [secrets, setSecrets] = useState<ApiSecretInfo[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .getApiSecrets()
+      .then(setSecrets)
+      .catch((e: unknown) =>
+        setErr(e instanceof Error ? e.message : "Impossible de charger les clés API."),
+      )
+      .finally(() => setLoadingData(false));
+  }, []);
+
+  function handleUpdated(updated: ApiSecretInfo) {
+    setSecrets((prev) => {
+      const idx = prev.findIndex((s) => s.provider === updated.provider);
+      if (idx === -1) return [...prev, updated];
+      const next = [...prev];
+      next[idx] = updated;
+      return next;
+    });
+  }
+
+  function handleDeleted(provider: string) {
+    setSecrets((prev) =>
+      prev.map((s) =>
+        s.provider === provider
+          ? { provider, configured: false, key_hint: null, updated_by: null, updated_at: null }
+          : s,
+      ),
+    );
+  }
+
+  if (loadingData) {
+    return (
+      <Panel bare className="flex items-center justify-center py-8">
+        <Spinner size={20} />
+        <span className="ml-3 text-[12px] text-text3">Chargement…</span>
+      </Panel>
+    );
+  }
+
+  if (err && secrets.length === 0) {
+    return (
+      <Panel bare className="px-3.5 py-4">
+        <InlineError message={err} />
+      </Panel>
+    );
+  }
+
+  // Build a map so each row can read its info even if the server omitted it.
+  const byProvider = Object.fromEntries(secrets.map((s) => [s.provider, s]));
+
+  return (
+    <Panel bare>
+      {API_SECRET_PROVIDERS.map((p, i) => {
+        const info = byProvider[p.id] ?? { provider: p.id, configured: false };
+        const isLast = i === API_SECRET_PROVIDERS.length - 1;
+        return (
+          <ApiSecretRow
+            key={p.id}
+            providerLabel={p.label}
+            info={info}
+            isLast={isLast}
+            onUpdated={handleUpdated}
+            onDeleted={handleDeleted}
+          />
+        );
+      })}
+      <div className="border-t border-line-soft px-3.5 py-2.5">
+        <span className="mono text-[10.5px] text-text3">
+          Les clés sont chiffrées au repos. Le mot de passe n&apos;est jamais renvoyé par le serveur.
+        </span>
+      </div>
+    </Panel>
+  );
+}
+
+function ApiSecretRow({
+  providerLabel,
+  info,
+  isLast,
+  onUpdated,
+  onDeleted,
+}: {
+  providerLabel: string;
+  info: ApiSecretInfo;
+  isLast: boolean;
+  onUpdated: (updated: ApiSecretInfo) => void;
+  onDeleted: (provider: string) => void;
+}) {
+  const [inputKey, setInputKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
+  const [rowErr, setRowErr] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (inputKey.length < 8) {
+      setRowErr("La clé doit contenir au moins 8 caractères.");
+      return;
+    }
+    setSaving(true);
+    setRowErr(null);
+    setSavedOk(false);
+    try {
+      const updated = await api.updateApiSecret({ provider: info.provider, api_key: inputKey });
+      setInputKey("");
+      setSavedOk(true);
+      onUpdated(updated);
+    } catch (e: unknown) {
+      setRowErr(e instanceof Error ? e.message : "Erreur lors de la sauvegarde.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setRowErr(null);
+    setSavedOk(false);
+    try {
+      await api.deleteApiSecret(info.provider);
+      onDeleted(info.provider);
+    } catch (e: unknown) {
+      setRowErr(e instanceof Error ? e.message : "Erreur lors de la suppression.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-2 px-3.5 py-3",
+        !isLast && "border-b border-line-soft",
+      )}
+    >
+      {/* header row: provider name + status */}
+      <div className="flex items-center gap-3">
+        <div
+          className={cn(
+            "grid h-[30px] w-[30px] flex-none place-items-center rounded-[7px] border text-[11px] font-bold",
+            info.configured
+              ? "border-ok-bg bg-ok-bg text-ok"
+              : "border-line bg-bg-3 text-text3",
+          )}
+          aria-hidden
+        >
+          {providerLabel.slice(0, 2).toUpperCase()}
+        </div>
+
+        <div className="min-w-0">
+          <span className="text-[12.5px] font-medium text-text">{providerLabel}</span>
+          {info.configured && info.key_hint && (
+            <span className="mono ml-2 text-[10.5px] text-text3">···{info.key_hint}</span>
+          )}
+          {info.updated_by && (
+            <div className="mono text-[10px] text-text3">
+              Mis à jour par {info.updated_by}
+            </div>
+          )}
+        </div>
+
+        <div className="ml-auto flex items-center gap-2">
+          <StateDot
+            ok={info.configured}
+            okLabel="Configurée"
+            koLabel="Non configurée"
+            koTone="amber"
+          />
+        </div>
+      </div>
+
+      {/* key input + actions */}
+      <div className="flex items-center gap-2 pl-[42px]">
+        <input
+          type="password"
+          autoComplete="new-password"
+          value={inputKey}
+          onChange={(e) => {
+            setInputKey(e.target.value);
+            setSavedOk(false);
+            setRowErr(null);
+          }}
+          placeholder={info.configured ? "Remplacer la clé…" : "Coller la clé API…"}
+          className={cn(fieldCls, "flex-1")}
+        />
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={saving || inputKey.length === 0}
+          className="disp flex flex-none items-center gap-1.5 rounded-[8px] border border-amber-line bg-amber-bg px-3 py-1.5 text-[11.5px] font-semibold tracking-[0.04em] text-amber-2 transition-colors hover:bg-amber-line disabled:opacity-40"
+        >
+          {saving ? <Spinner size={13} /> : <Save size={13} strokeWidth={2.2} aria-hidden />}
+          Enregistrer
+        </button>
+        {info.configured && (
+          <button
+            type="button"
+            onClick={() => void handleDelete()}
+            disabled={deleting}
+            className="disp flex flex-none items-center gap-1.5 rounded-[8px] border border-line bg-bg-2 px-3 py-1.5 text-[11.5px] font-semibold tracking-[0.04em] text-text2 transition-colors hover:border-stop hover:bg-stop-bg hover:text-stop disabled:opacity-40"
+          >
+            {deleting ? <Spinner size={13} /> : <Trash2 size={13} strokeWidth={2.2} aria-hidden />}
+            Supprimer
+          </button>
+        )}
+      </div>
+
+      {/* feedback */}
+      {rowErr && (
+        <div className="flex items-center gap-1.5 pl-[42px] text-[11.5px] text-stop">
+          <AlertTriangle size={12} strokeWidth={2.2} aria-hidden />
+          {rowErr}
+        </div>
+      )}
+      {savedOk && !rowErr && (
+        <div className="flex items-center gap-1.5 pl-[42px] text-[11.5px] text-ok">
+          <Check size={12} strokeWidth={2.5} aria-hidden />
+          Clé enregistrée et activée.
+        </div>
+      )}
+    </div>
   );
 }
 

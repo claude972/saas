@@ -5,9 +5,15 @@ Public API is unchanged from the previous hand-rolled router. Agents call
 error; ``command_router`` calls ``classify_intent_llm``; ``routes/settings``
 calls ``provider_available`` / ``available_providers``.
 
-Four providers are supported: anthropic, openai, google, deepseek. A provider
-is "available" when its API key (from ``config.settings``) is non-empty.
-``llm_available()`` returns True when at least one provider has a key.
+Four providers are supported for LLM completion: anthropic, openai, google,
+deepseek. A provider is "available" when its API key (from ``config.settings``
+or the DB-loaded hot-reload cache) is non-empty.  ``llm_available()`` returns
+True when at least one of those four has a key.
+
+A fifth entry "perplexity" is tracked in ``_PROVIDER_KEYS`` for hot-reload
+purposes (get/set/clear_provider_key) but is NOT included in
+``available_providers()`` / ``llm_available()`` so existing /health and
+/settings/llm callers are unaffected.
 
 Strict rule for the Anthropic opus-4-8 model: NEVER send temperature, top_p,
 top_k or thinking — only the model, the system prompt, the user message and
@@ -18,11 +24,14 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 
 from pydantic_ai import Agent, BinaryContent
 
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Module-level defaults (read once at import time).
@@ -68,13 +77,26 @@ _PROVIDER_PREFIX: dict[str, str] = {
     "deepseek": "deepseek",
 }
 
-# Provider API keys (from config). Mapping used both for availability checks
-# and to export the keys into the environment for PydanticAI to read.
+# Provider API keys — mutable module-level cache seeded from settings at
+# import time.  ``set_provider_key`` / ``clear_provider_key`` update both this
+# dict and os.environ so that PydanticAI picks up changes immediately.
+# "perplexity" is included here for hot-reload purposes only; it is NOT part
+# of the LLM completion path (available_providers / llm_available).
 _PROVIDER_KEYS: dict[str, str] = {
     "anthropic": settings.ANTHROPIC_API_KEY,
     "openai": settings.OPENAI_API_KEY,
     "google": settings.GOOGLE_API_KEY,
     "deepseek": settings.DEEPSEEK_API_KEY,
+    "perplexity": settings.PERPLEXITY_API_KEY,
+}
+
+# Canonical environment variable names per provider.
+_ENV_NAMES: dict[str, str] = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "perplexity": "PERPLEXITY_API_KEY",
 }
 
 # PydanticAI reads provider credentials from the environment. Export whatever
@@ -85,6 +107,7 @@ for _env_name, _key in (
     ("OPENAI_API_KEY", _PROVIDER_KEYS["openai"]),
     ("GOOGLE_API_KEY", _PROVIDER_KEYS["google"]),
     ("DEEPSEEK_API_KEY", _PROVIDER_KEYS["deepseek"]),
+    ("PERPLEXITY_API_KEY", _PROVIDER_KEYS["perplexity"]),
 ):
     if _key and not os.getenv(_env_name):
         os.environ[_env_name] = _key
@@ -121,6 +144,89 @@ def available_providers() -> list[str]:
 def llm_available() -> bool:
     """Return True when at least one provider is configured."""
     return len(available_providers()) > 0
+
+
+# ---------------------------------------------------------------------------
+# Hot-reload helpers (mutable key cache)
+# ---------------------------------------------------------------------------
+
+
+def get_provider_key(provider: str) -> str:
+    """Return the current in-memory API key for *provider* (may be empty).
+
+    Works for all five providers including "perplexity".
+    """
+    return _PROVIDER_KEYS.get(provider.lower(), "")
+
+
+def set_provider_key(provider: str, key: str) -> None:
+    """Update the in-memory cache AND os.environ for *provider*.
+
+    The change takes effect immediately for PydanticAI and for any code that
+    reads the key via ``get_provider_key``.  Silently ignores unknown providers.
+    """
+    p = provider.lower()
+    env_name = _ENV_NAMES.get(p)
+    if env_name is None:
+        logger.warning("set_provider_key: unknown provider %r — ignored.", p)
+        return
+    _PROVIDER_KEYS[p] = key
+    os.environ[env_name] = key
+
+
+def clear_provider_key(provider: str) -> None:
+    """Restore the original env-file value for *provider* in cache and os.environ.
+
+    Used when a DB-stored secret is deleted: reverts to whatever ``settings``
+    (the pydantic-settings object seeded at boot) originally provided.
+    """
+    p = provider.lower()
+    env_name = _ENV_NAMES.get(p)
+    if env_name is None:
+        logger.warning("clear_provider_key: unknown provider %r — ignored.", p)
+        return
+    # Retrieve the original value from the settings object (always present,
+    # defaults to "" when the env var was absent at boot).
+    original = getattr(settings, env_name, "")
+    _PROVIDER_KEYS[p] = original
+    os.environ[env_name] = original
+
+
+async def load_keys_from_db(session) -> None:
+    """Load all ApiSecret rows and push their decrypted keys into the cache.
+
+    Called once during lifespan startup.  DB values take precedence over env
+    so that secrets managed from the cockpit survive restarts.
+
+    Best-effort: a failure on one row is logged and skipped; the function
+    never raises.  The password/key value is NEVER logged.
+    """
+    try:
+        from sqlalchemy import select as _select
+
+        from models import ApiSecret
+        from services.crypto import decrypt_secret
+
+        result = await session.execute(_select(ApiSecret))
+        rows: list[ApiSecret] = list(result.scalars().all())
+    except Exception as exc:
+        logger.warning(
+            "load_keys_from_db: could not query api_secrets (%s) — skip.",
+            type(exc).__name__,
+        )
+        return
+
+    for row in rows:
+        try:
+            plaintext = decrypt_secret(row.encrypted_key)
+            if plaintext:
+                set_provider_key(row.provider, plaintext)
+        except Exception as exc:
+            logger.warning(
+                "load_keys_from_db: failed to load key for provider %r (%s) — skip.",
+                row.provider,
+                type(exc).__name__,
+            )
 
 
 # ---------------------------------------------------------------------------

@@ -33,6 +33,7 @@ from routes.settings import router as settings_router
 from routes.skills import router as skills_router
 from routes.tasks import router as tasks_router
 from routes.tenders import router as tenders_router
+from routes.sources import router as sources_router
 from routes.veille import router as veille_router
 
 logger = logging.getLogger("openclaw.api")
@@ -74,6 +75,20 @@ async def lifespan(app: FastAPI):
                 "search_prompt TEXT"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE tender_offers ADD COLUMN IF NOT EXISTS sectors JSON"
+            )
+        )
+
+    # 2b. Operational guard: warn when no dedicated encryption key is set.
+    if not settings.SECRETS_ENCRYPTION_KEY:
+        logger.warning(
+            "SECRETS_ENCRYPTION_KEY non défini — les secrets (clés API, mots de "
+            "passe de portails) sont chiffrés avec une clé DÉRIVÉE de JWT_SECRET. "
+            "En production : définissez une clé Fernet dédiée et ne modifiez pas "
+            "JWT_SECRET (sinon les secrets stockés deviennent indéchiffrables)."
+        )
 
     # 3. Seed agents only when the agents table is empty.
     try:
@@ -87,7 +102,16 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001 - never let seeding crash startup
         logger.exception("Agent seeding failed; continuing without seed.")
 
-    # 4. Start the veille background scheduler.
+    # 4. Load API keys from DB into the in-memory hot-reload cache (best-effort).
+    try:
+        from agents.llm import load_keys_from_db
+
+        async with async_session_maker() as session:
+            await load_keys_from_db(session)
+    except Exception:  # noqa: BLE001 - never let key loading crash startup
+        logger.exception("load_keys_from_db failed; continuing with env keys only.")
+
+    # 5. Start the veille background scheduler.
     try:
         from services.veille_scheduler import scheduler
 
@@ -98,7 +122,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # 5. Stop the veille scheduler on shutdown.
+        # 6. Stop the veille scheduler on shutdown.
         try:
             from services.veille_scheduler import scheduler
 
@@ -129,6 +153,7 @@ app.include_router(logs_router, prefix="/logs", tags=["logs"])
 app.include_router(skills_router, prefix="/skills", tags=["skills"])
 app.include_router(settings_router, prefix="/settings", tags=["settings"])
 app.include_router(tenders_router, prefix="/tenders", tags=["tenders"])
+app.include_router(sources_router, prefix="/sources", tags=["sources"])
 app.include_router(veille_router, prefix="/veille", tags=["veille"])
 
 

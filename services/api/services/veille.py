@@ -19,6 +19,7 @@ Constantes de configuration par défaut (conformes au contrat partagé)
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
@@ -27,8 +28,10 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings
 from core.audit_logger import log_event
-from models import TenderOffer, VeilleConfig
+from models import MonitoredSource, TenderOffer, VeilleConfig
+from services.sectors import classify_sectors
 
 logger = logging.getLogger("openclaw.veille")
 
@@ -269,6 +272,136 @@ async def run_veille(db: AsyncSession) -> dict:
             except Exception:  # noqa: BLE001
                 logger.warning("veille: erreur lors de l'appel browser-use.", exc_info=True)
 
+        # --- Collecte sources surveillées (portails avec login) ---
+        try:
+            from services.browser_use_runner import (
+                browser_use_available,
+                extract_from_portal,
+            )
+
+            now_for_sources = datetime.now(tz=timezone.utc)
+
+            # Charge les sources activées dont l'extraction est due.
+            sources_result = await db.execute(
+                select(MonitoredSource).where(MonitoredSource.enabled.is_(True))
+            )
+            all_sources: list[MonitoredSource] = list(sources_result.scalars().all())
+
+            due_sources = [
+                src
+                for src in all_sources
+                if (
+                    src.last_extract_at is None
+                    or (now_for_sources - src.last_extract_at).total_seconds()
+                    >= src.extract_interval_minutes * 60
+                )
+            ]
+
+            if due_sources:
+                if browser_use_available():
+                    semaphore = asyncio.Semaphore(max(1, settings.MAX_CONCURRENT_PORTALS))
+
+                    # --- Typage du résultat d'extraction par portail ---
+                    # Tuple: (src_id, status, count, error_msg, offers)
+                    # INVARIANT: _extract_one ne fait AUCUN await sur `db` et ne
+                    # mute AUCUN objet ORM.  Toutes les mutations src.last_* sont
+                    # appliquées séquentiellement APRÈS asyncio.gather, dans la
+                    # coroutine principale, pour éviter le partage concurrent
+                    # d'une AsyncSession (non task-safe sous asyncpg).
+                    async def _extract_one(
+                        src: MonitoredSource,
+                    ) -> tuple[str, str, int, str | None, list[dict]]:
+                        """Extrait les offres d'un portail surveillé.
+
+                        Déchiffre le mot de passe en mémoire locale uniquement.
+                        Ne lève jamais, ne logue jamais le mot de passe.
+                        Ne touche PAS à la session SQLAlchemy (db) — les
+                        mutations ORM sont effectuées par l'appelant après gather.
+
+                        Returns:
+                            (src_id, status, count, error_msg, offers)
+                        """
+                        from services.crypto import decrypt_secret
+
+                        src_id = str(src.id)
+                        async with semaphore:
+                            try:
+                                # Déchiffrement local — jamais loggé ni propagé.
+                                plain_password: str | None = None
+                                if src.encrypted_password:
+                                    plain_password = decrypt_secret(src.encrypted_password) or None
+
+                                portal_offers = await extract_from_portal(
+                                    url=src.url,
+                                    email=src.login_email,
+                                    password=plain_password,
+                                    region_filters=src.region_filters,
+                                    sector_filters=src.sector_filters,
+                                    limit=10,
+                                    timeout=120,
+                                )
+                                plain_password = None  # effacement immédiat
+
+                                for item in portal_offers:
+                                    item.setdefault("source", "portal")
+
+                                portal_count = len(portal_offers)
+                                logger.info(
+                                    "veille: portail '%s' a retourné %d offre(s).",
+                                    src.label,
+                                    portal_count,
+                                )
+                                return (src_id, "ok", portal_count, None, portal_offers)
+
+                            except Exception:  # noqa: BLE001
+                                logger.warning(
+                                    "veille: erreur lors de l'extraction du portail '%s'.",
+                                    src.label,
+                                    exc_info=True,
+                                )
+                                return (
+                                    src_id,
+                                    "error",
+                                    0,
+                                    "Erreur d'extraction — détail dans les logs.",
+                                    [],
+                                )
+
+                    # Exécution concurrente — aucun await sur `db` à l'intérieur.
+                    portal_results = await asyncio.gather(
+                        *[_extract_one(src) for src in due_sources]
+                    )
+
+                    # Reconstruction d'un index src_id -> objet ORM pour les mises
+                    # à jour séquentielles (une seule itération sur due_sources).
+                    src_by_id = {str(src.id): src for src in due_sources}
+                    now_portal = datetime.now(tz=timezone.utc)
+
+                    # Application séquentielle des mutations ORM — aucun await
+                    # concurrent sur db, donc aucun risque de collision de session.
+                    for src_id, status, count, err_msg, offers in portal_results:
+                        src_obj = src_by_id.get(src_id)
+                        if src_obj is not None:
+                            src_obj.last_extract_at = now_portal
+                            src_obj.last_status = status
+                            src_obj.last_count = count
+                            src_obj.last_error = err_msg
+                            db.add(src_obj)
+                        collected.extend(offers)
+
+                else:
+                    # browser-use non disponible : on note juste dans les logs.
+                    logger.debug(
+                        "veille: %d source(s) due(s) mais browser-use non disponible.",
+                        len(due_sources),
+                    )
+
+        except ImportError:
+            # extract_from_portal non encore disponible (déploiement partiel).
+            logger.debug("veille: extract_from_portal non disponible, sources ignorées.")
+        except Exception:  # noqa: BLE001
+            logger.warning("veille: erreur lors du traitement des sources surveillées.", exc_info=True)
+
         # --- Déduplication ---
         if collected:
             # Calcule les clés des offres collectées
@@ -306,17 +439,26 @@ async def run_veille(db: AsyncSession) -> dict:
                     except (ValueError, TypeError):
                         deadline_dt = None
 
+                summary_val = offer_data.get("summary") or None
+                keywords_val = offer_data.get("keywords_matched") or None
+                sectors_val = classify_sectors(
+                    title + " " + (summary_val or ""),
+                    keywords_val if isinstance(keywords_val, list) else None,
+                )
+
                 new_offer = TenderOffer(
                     title=title[:512],
                     source=str(offer_data.get("source") or "perplexity")[:50],
                     organization=(str(offer_data.get("organization") or "")[:512] or None),
-                    summary=(offer_data.get("summary") or None),
+                    summary=summary_val,
                     lots=(offer_data.get("lots") or None),
                     location=(str(offer_data.get("location") or "")[:255] or None),
                     region=(str(offer_data.get("region") or "")[:100] or None),
                     deadline=deadline_dt,
                     url=(str(offer_data.get("url") or "")[:1024] or None),
                     status="new",
+                    keywords_matched=keywords_val,
+                    sectors=sectors_val,
                     raw=offer_data if isinstance(offer_data, dict) else None,
                     dedup_key=key,
                 )

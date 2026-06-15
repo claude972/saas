@@ -19,8 +19,18 @@ from agents.llm import LLMUnavailable, complete_json
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Prompt système
+# Prompts système
 # ---------------------------------------------------------------------------
+
+_SYSTEM_PROMPT_MINI = (
+    "Tu es un expert BTP specialise dans les marches publics DOM. "
+    "Analyse l'appel d'offres fourni et reponds UNIQUEMENT par un objet JSON valide, "
+    "sans texte autour, de la forme :\n"
+    '{"synthese": "<resume en 2 phrases max>", '
+    '"lots": [{"numero": "<n>", "intitule": "<intitule>", "montant_estime": "<montant ou null>"}], '
+    '"delais": "<delais cles en une phrase>", '
+    '"recommandation": "<Repondre|Ne pas repondre|A approfondir> — <justification en 1 phrase>"}'
+)
 
 _SYSTEM_PROMPT = (
     "Tu es un responsable d'appels d'offres BTP experimente, specialise dans les "
@@ -100,6 +110,28 @@ def _critere_list(value: object) -> list[dict]:
     return result
 
 
+def _stub_content_mini(
+    title: str,
+    summary: str | None,
+    lots: object,
+    reason: str,
+) -> dict:
+    """Stub cohérent pour le mode mini quand le LLM est indisponible."""
+    lots_list: list[dict] = []
+    if isinstance(lots, list):
+        lots_list = _lot_list(lots)
+
+    return {
+        "stub": True,
+        "synthese": (
+            f"Analyse indisponible (LLM non configure). Titre : {title}."
+        ),
+        "lots": lots_list,
+        "delais": "Non precise",
+        "recommandation": f"A approfondir — LLM indisponible : {reason}.",
+    }
+
+
 def _stub_content(
     title: str,
     summary: str | None,
@@ -146,6 +178,7 @@ async def analyze_offer(
     provider: str | None,
     model: str | None,
     skills_text: str = "",
+    mode: str = "full",
 ) -> dict:
     """Analyse un appel d'offres BTP et retourne un dict de contenu structuré.
 
@@ -167,16 +200,22 @@ async def analyze_offer(
         Identifiant du modèle LLM, ou None pour le défaut du provider.
     skills_text:
         Texte de compétences de l'entreprise à injecter en tête du prompt système.
+    mode:
+        ``"mini"`` pour un rapport condensé (synthèse + lots + délais + reco go/no-go).
+        ``"full"`` (défaut) pour l'analyse complète avec toutes les sections.
 
     Retourne
     --------
     dict
         Contenu structuré compatible avec ``Document.content`` (type ``analyse_ao``).
-        Les clés garanties sont : ``synthese``, ``lots``, ``pieces_demandees``,
-        ``criteres``, ``delais``, ``contraintes_dom``, ``risques``,
-        ``recommandation``. En cas d'erreur, ``"stub": True`` est aussi présent.
+        Mode full — clés garanties : ``synthese``, ``lots``, ``pieces_demandees``,
+        ``criteres``, ``delais``, ``contraintes_dom``, ``risques``, ``recommandation``.
+        Mode mini — clés garanties : ``synthese``, ``lots``, ``delais``, ``recommandation``.
+        En cas d'erreur, ``"stub": True`` est aussi présent.
     """
-    system = f"{skills_text}\n\n{_SYSTEM_PROMPT}" if skills_text else _SYSTEM_PROMPT
+    is_mini = mode == "mini"
+    base_prompt = _SYSTEM_PROMPT_MINI if is_mini else _SYSTEM_PROMPT
+    system = f"{skills_text}\n\n{base_prompt}" if skills_text else base_prompt
 
     # Build the user prompt from available fields.
     lots_text = ""
@@ -219,17 +258,27 @@ async def analyze_offer(
         )
     except LLMUnavailable as exc:
         logger.warning("ao_analysis: LLM indisponible — %s", exc)
+        if is_mini:
+            return _stub_content_mini(title, summary, lots, str(exc))
         return _stub_content(title, summary, lots, str(exc))
     except Exception as exc:  # noqa: BLE001 — on ne plante jamais
         logger.exception("ao_analysis: erreur inattendue lors de l'appel LLM")
+        if is_mini:
+            return _stub_content_mini(title, summary, lots, str(exc))
         return _stub_content(title, summary, lots, str(exc))
 
     # Normalise each field defensively so the caller always gets a clean dict.
-    synthese = str(result.get("synthese", "")).strip() or (
-        f"Analyse de l'offre : {title}."
-    )
+    synthese = str(result.get("synthese", "")).strip() or f"Analyse de l'offre : {title}."
     delais = str(result.get("delais", "")).strip() or "Non precise"
     recommandation = str(result.get("recommandation", "")).strip() or "A approfondir"
+
+    if is_mini:
+        return {
+            "synthese": synthese,
+            "lots": _lot_list(result.get("lots", lots)),
+            "delais": delais,
+            "recommandation": recommandation,
+        }
 
     return {
         "synthese": synthese,

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Terminal,
@@ -19,6 +20,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { clearToken } from "@/lib/auth";
+import { api } from "@/lib/api";
+import type { OpenClawStatus } from "@/lib/types";
 
 interface NavItem {
   href: string;
@@ -40,14 +43,54 @@ const NAV: NavItem[] = [
   { href: "/settings", label: "Paramètres", icon: Settings },
 ];
 
+function formatRelative(isoString: string | null): string {
+  if (!isoString) return "—";
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+  if (diff < 60) return `il y a ${diff}s`;
+  if (diff < 3600) return `il y a ${Math.floor(diff / 60)}min`;
+  if (diff < 86400) return `il y a ${Math.floor(diff / 3600)}h`;
+  return `il y a ${Math.floor(diff / 86400)}j`;
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [ocStatus, setOcStatus] = useState<OpenClawStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchStatus() {
+      try {
+        const s = await api.getOpenclawStatus();
+        if (!cancelled) setOcStatus(s);
+      } catch {
+        // backend unreachable — keep previous value
+      }
+    }
+
+    void fetchStatus();
+    const id = setInterval(() => void fetchStatus(), 20_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   function logout() {
     clearToken();
     router.replace("/login");
   }
+
+  const connected = ocStatus?.connected ?? false;
+  const lastSeen = formatRelative(ocStatus?.last_seen ?? null);
+  const modelInfo = ocStatus?.model_info;
+  const modelLabel =
+    typeof modelInfo?.default_provider === "string"
+      ? modelInfo.default_provider
+      : ocStatus === null
+      ? "…"
+      : "—";
 
   return (
     <aside className="flex h-full flex-col overflow-y-auto border-r border-line bg-bg-1 px-3 py-3.5">
@@ -85,14 +128,24 @@ export function Sidebar() {
       {/* OpenClaw status block */}
       <div className="mx-1 rounded-[9px] border border-line-soft bg-bg-2 p-3">
         <div className="mb-2 flex items-center gap-2 border-b border-line-soft pb-2">
-          <Pulse />
-          <span className="disp text-[11px] font-semibold uppercase tracking-[0.11em] text-ok">
+          {connected ? <Pulse /> : <DotRed />}
+          <span
+            className={cn(
+              "disp text-[11px] font-semibold uppercase tracking-[0.11em]",
+              connected ? "text-ok" : "text-stop",
+            )}
+          >
             Statut OpenClaw
           </span>
         </div>
-        <StatusRow k="État" v="Opérationnel" amber />
-        <StatusRow k="Modèle actif" v="opus-4.8" />
-        <StatusRow k="Backend" v="FastAPI" />
+        <StatusRow
+          k="État"
+          v={connected ? "Connecté" : "Déconnecté"}
+          ok={connected}
+          err={!connected}
+        />
+        <StatusRow k="Dernier contact" v={lastSeen} />
+        <StatusRow k="Modèle" v={modelLabel} />
       </div>
 
       <div className="mt-auto pt-4">
@@ -105,9 +158,8 @@ export function Sidebar() {
           Déconnexion
         </button>
         <div className="mono mx-1.5 mt-3 text-[10px] leading-[1.8] text-text3">
-          <span className="text-ok">●</span> backend · local
-          <br />
-          postgres · 7 tables
+          <span className={connected ? "text-ok" : "text-stop"}>●</span>{" "}
+          backend · local
           <br />
           cockpit v0.1.0
         </div>
@@ -119,11 +171,13 @@ export function Sidebar() {
 function StatusRow({
   k,
   v,
-  amber = false,
+  ok = false,
+  err = false,
 }: {
   k: string;
   v: string;
-  amber?: boolean;
+  ok?: boolean;
+  err?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between py-1">
@@ -131,12 +185,18 @@ function StatusRow({
       <span
         className={cn(
           "mono text-[11.5px]",
-          amber ? "text-amber-2" : "text-text2",
+          ok ? "text-ok" : err ? "text-stop" : "text-text2",
         )}
       >
         {v}
       </span>
     </div>
+  );
+}
+
+function DotRed() {
+  return (
+    <span className="relative h-[8px] w-[8px] flex-none rounded-full bg-stop" />
   );
 }
 

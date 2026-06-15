@@ -444,6 +444,7 @@ class TenderOfferCreate(BaseModel):
     deadline: datetime | None = None
     raw: dict | None = None
     score: float | None = None
+    sectors: list | None = None
 
     @field_validator("url", mode="before")
     @classmethod
@@ -465,6 +466,7 @@ class TenderOfferUpdate(BaseModel):
     status: str | None = None
     score: float | None = None
     keywords_matched: list | None = None
+    sectors: list | None = None
     raw: dict | None = None
     document_id: uuid.UUID | None = None
 
@@ -491,6 +493,7 @@ class TenderOfferRead(BaseModel):
     status: str
     score: float | None = None
     keywords_matched: list | None = None
+    sectors: list | None = None
     raw: dict | None = None
     dedup_key: str | None = None
     document_id: uuid.UUID | None = None
@@ -562,3 +565,127 @@ class TenderAnalyzeRequest(BaseModel):
     instruction: str | None = None
     provider: str | None = None
     model: str | None = None
+    mode: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# ApiSecret — clés LLM chiffrées au repos (WRITE-ONLY : jamais la clé en Read)
+# ---------------------------------------------------------------------------
+
+_ALLOWED_PROVIDERS = ("anthropic", "openai", "google", "deepseek", "perplexity")
+
+
+class ApiSecretRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    provider: str
+    configured: bool
+    key_hint: str | None = None
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class ApiSecretUpdate(BaseModel):
+    provider: str
+    # write-only : la valeur brute n'est JAMAIS renvoyée au client
+    api_key: str = Field(min_length=8)
+
+    @field_validator("provider")
+    @classmethod
+    def _check_provider(cls, v: str) -> str:
+        if v not in _ALLOWED_PROVIDERS:
+            raise ValueError(
+                f"provider doit être parmi : {', '.join(_ALLOWED_PROVIDERS)}"
+            )
+        return v
+
+
+# ---------------------------------------------------------------------------
+# MonitoredSource — portails surveillés (login_password WRITE-ONLY)
+# ---------------------------------------------------------------------------
+def _validate_source_url(v: str) -> str:
+    """Valide qu'une URL de portail surveillé est de schéma http ou https.
+
+    Contrairement à ``_validate_tender_url`` (qui rejette silencieusement),
+    cette fonction lève ``ValueError`` car ``url`` est un champ obligatoire dans
+    ``MonitoredSourceCreate`` : une URL invalide doit être refusée, pas ignorée.
+
+    Protège contre :
+    * les schémas dangereux : ``file://``, ``gopher://``, ``javascript:``, etc.
+    * les cibles de SSRF évidentes (schéma non-http/https).
+
+    La protection réseau complémentaire (résolution DNS + rejet RFC1918/loopback)
+    est appliquée côté serveur dans ``extract_from_portal`` et ``test_source``.
+    """
+    stripped = v.strip() if v else ""
+    if not stripped:
+        raise ValueError("L'URL du portail ne peut pas être vide.")
+    lower = stripped.lower()
+    if not (lower.startswith("http://") or lower.startswith("https://")):
+        raise ValueError(
+            "L'URL du portail doit commencer par http:// ou https:// "
+            "(schémas file://, gopher://, etc. sont refusés)."
+        )
+    return stripped
+
+
+class MonitoredSourceCreate(BaseModel):
+    label: str
+    url: str
+    login_email: str | None = None
+    # write-only : jamais renvoyé au client
+    login_password: str | None = None
+    region_filters: list | None = None
+    sector_filters: list | None = None
+    extract_interval_minutes: int = Field(default=360, ge=30, le=10080)
+    enabled: bool = True
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def _check_url(cls, v: object) -> str:
+        """Rejette les URLs non-http(s) pour prévenir le SSRF côté serveur."""
+        return _validate_source_url(str(v) if v is not None else "")
+
+
+class MonitoredSourceUpdate(BaseModel):
+    label: str | None = None
+    url: str | None = None
+    login_email: str | None = None
+    # write-only : re-chiffré uniquement si fourni non-vide
+    login_password: str | None = None
+    region_filters: list | None = None
+    sector_filters: list | None = None
+    extract_interval_minutes: int | None = Field(default=None, ge=30, le=10080)
+    enabled: bool | None = None
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def _check_url(cls, v: object) -> str | None:
+        """Rejette les URLs non-http(s) pour prévenir le SSRF côté serveur.
+
+        ``url`` est optionnel dans Update : ``None`` est accepté tel quel.
+        """
+        if v is None:
+            return None
+        return _validate_source_url(str(v))
+
+
+class MonitoredSourceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    label: str
+    url: str
+    login_email: str | None = None
+    # indique si un mot de passe est stocké — la valeur n'est JAMAIS exposée
+    has_password: bool
+    region_filters: list | None = None
+    sector_filters: list | None = None
+    enabled: bool
+    extract_interval_minutes: int
+    last_extract_at: datetime | None = None
+    last_status: str | None = None
+    last_error: str | None = None
+    last_count: int | None = None
+    created_at: datetime
+    updated_at: datetime
