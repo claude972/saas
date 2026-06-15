@@ -757,6 +757,196 @@ def _export_xlsx(doc: Any, company: Any) -> bytes:
 
 
 # ===========================================================================
+# OBAT import exporter — openpyxl
+# ===========================================================================
+
+
+def export_obat(doc: Any, company: Any) -> tuple[bytes, str, str]:
+    """Export a quote/dpgf document to the Obat import XLSX format.
+
+    The Obat import format requires:
+    - A sheet named "Modèle"
+    - Column A left empty
+    - Data in columns B through K with exact header labels (including newlines)
+    - Section rows (Type="Section") before their Ouvrage rows
+    - Ouvrage rows numbered A.1, A.2 … when sections are present, else 1, 2 …
+
+    Returns:
+        ``(bytes, media_type, filename)`` — ready to pass to a FastAPI
+        ``StreamingResponse`` with ``Content-Disposition: attachment``.
+    """
+    try:
+        import openpyxl
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError as exc:
+        raise ExportUnavailable(
+            "openpyxl n'est pas installé (pip install openpyxl)."
+        ) from exc
+
+    c = _ch(company)
+    content: dict = getattr(doc, "content", None) or {}
+    title: str = _s(getattr(doc, "title", "document")) or "document"
+
+    raw_lines = _lst(content.get("lines"))
+    tva_rate = _f(content.get("tva_rate"), c["default_tva_rate"])
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Modèle"
+
+    # Column B..K headers — exact labels required by Obat (column A stays empty)
+    HEADERS = [
+        "Type",
+        "Numérotation",
+        "Référence",
+        "Désignation",
+        "Quantité",
+        "Unité",
+        "Prix U. HT\n(en €)",
+        "Remise\n(en %)",
+        "Déboursé sec\n(en €)",
+        "TVA\n(en %)",
+    ]
+
+    # Column widths (B=col2 .. K=col11), index 0 = col B
+    COL_WIDTHS = [12, 16, 18, 44, 12, 10, 16, 12, 18, 12]
+
+    font_bold = Font(bold=True)
+    fill_hdr = PatternFill("solid", fgColor="1F2937")  # dark header
+    font_hdr = Font(bold=True, color="FFFFFF")
+    align_wrap = Alignment(wrap_text=True, vertical="center", horizontal="center")
+    align_left = Alignment(vertical="center")
+
+    # Write header row (row 1, columns B..K = 2..11)
+    for col_offset, header_text in enumerate(HEADERS):
+        col_idx = 2 + col_offset  # B=2
+        cell = ws.cell(row=1, column=col_idx, value=header_text)
+        cell.font = font_hdr
+        cell.fill = fill_hdr
+        cell.alignment = align_wrap
+        ws.column_dimensions[get_column_letter(col_idx)].width = COL_WIDTHS[col_offset]
+
+    # Fix row 1 height to accommodate wrapped headers
+    ws.row_dimensions[1].height = 30
+
+    # Parse lines and detect grouping by lot/group/section field.
+    # Separator/stub rows (qty=0, unit_price=0, no ref, total_ht=0) are skipped:
+    # they act as visual spacers in the quote editor and have no meaning in Obat.
+    # This matches the convention in _recalculate_quote_totals where separators
+    # carry total_ht == 0 and are excluded from the monetary sum.
+    parsed_lines: list[dict] = []
+    for row in raw_lines:
+        if not isinstance(row, dict):
+            continue
+        qty = _f(row.get("qty"))
+        unit_price_ht = _f(row.get("unit_price_ht"))
+        ref = _s(row.get("ref") or row.get("reference"))
+        total_ht = _f(row.get("total_ht"), qty * unit_price_ht)
+        # Detect separator: zero qty, zero price, zero total, no reference.
+        if qty == 0.0 and unit_price_ht == 0.0 and total_ht == 0.0 and not ref:
+            continue
+        line_tva = _f(row.get("tva"), tva_rate)
+        parsed_lines.append(
+            {
+                "label": _s(row.get("label")) or "Ligne sans libellé",
+                "qty": qty,
+                "unit": _s(row.get("unit")) or "u",
+                "unit_price_ht": unit_price_ht,
+                "total_ht": total_ht,
+                "ref": ref,
+                "lot": _s(row.get("lot") or row.get("group") or row.get("section")),
+                "tva_rate": line_tva,
+            }
+        )
+
+    has_sections = any(ln["lot"] for ln in parsed_lines)
+
+    xlsx_row = 2  # data starts at row 2
+
+    def _write_section(section_label: str, section_letter: str) -> None:
+        """Emit one Section row."""
+        nonlocal xlsx_row
+        values = [
+            "Section",       # Type       col B
+            section_letter,  # Numérotation col C
+            "",              # Référence  col D
+            section_label,   # Désignation col E
+            "",              # Quantité   col F
+            "",              # Unité      col G
+            "",              # Prix U. HT col H
+            "",              # Remise     col I
+            "",              # Déboursé   col J
+            "",              # TVA        col K
+        ]
+        for col_offset, val in enumerate(values):
+            cell = ws.cell(row=xlsx_row, column=2 + col_offset, value=val)
+            cell.font = font_bold
+            cell.alignment = align_left
+        xlsx_row += 1
+
+    def _write_ouvrage(line: dict, numbering: str) -> None:
+        """Emit one Ouvrage row."""
+        nonlocal xlsx_row
+        tva_pct = line["tva_rate"] * 100
+        values = [
+            "Ouvrage",          # Type       col B
+            numbering,          # Numérotation col C
+            line["ref"],        # Référence  col D
+            line["label"],      # Désignation col E
+            line["qty"],        # Quantité   col F
+            line["unit"],       # Unité      col G
+            line["unit_price_ht"],  # Prix U. HT col H
+            "",                 # Remise     col I (empty per spec)
+            "",                 # Déboursé   col J (empty per spec)
+            tva_pct,            # TVA        col K
+        ]
+        for col_offset, val in enumerate(values):
+            col_idx = 2 + col_offset
+            cell = ws.cell(row=xlsx_row, column=col_idx, value=val)
+            cell.alignment = align_left
+            # Numeric format for quantity, unit price, and TVA columns
+            # values[4] = qty  -> col_idx = 2+4 = 6 (col F)
+            # values[6] = price -> col_idx = 2+6 = 8 (col H)
+            # values[9] = tva  -> col_idx = 2+9 = 11 (col K)
+            if col_idx == 6 and isinstance(val, (int, float)):  # Quantité col F
+                cell.number_format = "0.##"
+            if col_idx == 8 and isinstance(val, (int, float)):  # Prix U. HT col H
+                cell.number_format = '#,##0.00'
+            if col_idx == 11 and isinstance(val, (int, float)):  # TVA col K
+                cell.number_format = "0.##"
+        xlsx_row += 1
+
+    if has_sections:
+        # Group lines by their lot value, preserving insertion order
+        groups: dict[str, list[dict]] = {}
+        for ln in parsed_lines:
+            lot_key = ln["lot"] or ""
+            groups.setdefault(lot_key, []).append(ln)
+
+        section_letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        sect_idx = 0
+        for lot_name, lot_lines in groups.items():
+            letter = section_letters[sect_idx] if sect_idx < len(section_letters) else str(sect_idx + 1)
+            _write_section(lot_name or f"Section {letter}", letter)
+            for ouvrage_idx, ln in enumerate(lot_lines, start=1):
+                _write_ouvrage(ln, f"{letter}.{ouvrage_idx}")
+            sect_idx += 1
+    else:
+        for ouvrage_idx, ln in enumerate(parsed_lines, start=1):
+            _write_ouvrage(ln, str(ouvrage_idx))
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    stem = _filename_stem(title)
+    media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    filename = f"{stem}-obat.xlsx"
+    return buf.read(), media_type, filename
+
+
+# ===========================================================================
 # Public entrypoint
 # ===========================================================================
 

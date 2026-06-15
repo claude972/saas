@@ -16,12 +16,14 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
   pdf: "PDF",
   docx: "Word",
   xlsx: "Excel",
+  obat: "Obat",
 };
 
 const FORMAT_MIMES: Record<ExportFormat, string> = {
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  obat: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
 
 const ALL_FORMATS: ExportFormat[] = ["pdf", "docx", "xlsx"];
@@ -77,14 +79,17 @@ interface ExportBarProps {
   documentId: string;
   /** xlsx only makes sense for quotes; hide it for other types when false */
   showXlsx?: boolean;
+  /** obat export only makes sense for devis/dpgf; hide it for other types when false */
+  showObat?: boolean;
   className?: string;
 }
 
-export function ExportBar({ documentId, showXlsx = true, className }: ExportBarProps) {
+export function ExportBar({ documentId, showXlsx = true, showObat = false, className }: ExportBarProps) {
   const [loading, setLoading] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const formats = showXlsx ? ALL_FORMATS : (["pdf", "docx"] as ExportFormat[]);
+  const base: ExportFormat[] = showXlsx ? ALL_FORMATS : ["pdf", "docx"];
+  const formats: ExportFormat[] = showObat ? [...base, "obat"] : base;
 
   async function handleExport(fmt: ExportFormat) {
     setLoading(fmt);

@@ -342,7 +342,7 @@ export interface UpdateDocumentInput {
   status?: DocumentStatus | string;
 }
 
-export type ExportFormat = "pdf" | "docx" | "xlsx";
+export type ExportFormat = "pdf" | "docx" | "xlsx" | "obat";
 
 // ---------- Veille AO — enums ----------
 

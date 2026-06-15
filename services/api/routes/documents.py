@@ -260,17 +260,23 @@ async def update_document(
 @router.get("/{document_id}/export")
 async def export_document_route(
     document_id: uuid.UUID,
-    fmt: str = Query(default="pdf", alias="format", description="Format d'export: pdf, docx ou xlsx"),
+    fmt: str = Query(default="pdf", alias="format", description="Format d'export: pdf, docx, xlsx ou obat"),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
     """Export a document as a binary file.
 
-    Supported formats: ``pdf``, ``docx``, ``xlsx``.
+    Supported formats: ``pdf``, ``docx``, ``xlsx``, ``obat``.
+
+    * ``obat`` — XLSX in OBAT import format (quotes/dpgf only).
+    * ``pdf`` for quote/dpgf types — attempts a branded Chromium PDF first,
+      falls back silently to the reportlab PDF if Chromium is unavailable.
 
     The company header and legal mentions are pulled from the
     :class:`~models.CompanySettings` singleton when available.
     """
+    import io
+
     document = await db.get(Document, document_id)
     if document is None:
         raise HTTPException(
@@ -278,16 +284,60 @@ async def export_document_route(
             detail="Document introuvable.",
         )
 
-    if fmt not in ("pdf", "docx", "xlsx"):
+    if fmt not in ("pdf", "docx", "xlsx", "obat"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Format non supporté: '{fmt}'. Valeurs acceptées: pdf, docx, xlsx.",
+            detail=f"Format non supporté: '{fmt}'. Valeurs acceptées: pdf, docx, xlsx, obat.",
         )
 
     company = await _load_company(db)
 
     try:
-        content_bytes, media_type, filename = export_document(document, company, fmt)
+        if fmt == "obat":
+            from services.exporters import export_obat
+            try:
+                content_bytes, media_type, filename = export_obat(document, company)
+            except ExportUnavailable:
+                raise  # re-raise so the outer handler returns 501
+            except Exception as obat_exc:
+                # Malformed content or unexpected error: fall back to standard xlsx.
+                try:
+                    content_bytes, media_type, filename = export_document(document, company, "xlsx")
+                except Exception:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=(
+                            "Impossible de générer l'export Obat pour ce document "
+                            f"({obat_exc.__class__.__name__}: {obat_exc})."
+                        ),
+                    )
+
+        elif fmt == "pdf" and getattr(document, "document_type", None) in ("quote", "dpgf"):
+            # Attempt branded Chromium PDF; fall back to reportlab on any failure.
+            content_bytes = None
+            media_type = "application/pdf"
+            from services.exporters import _filename_stem, _s
+            stem = _filename_stem(_s(getattr(document, "title", "document")) or "document")
+            filename = f"{stem}.pdf"
+            try:
+                from services.devis_html import render_devis_html
+                from services.pdf_render import pdf_render_available, render_pdf_from_html
+                if pdf_render_available():
+                    html = render_devis_html(document, company)
+                    # Guard: only ship the branded PDF if the body actually has
+                    # line rows; otherwise fall back to reportlab (never deliver
+                    # an empty branded sheet on a template/data error).
+                    if "<tr" in html:
+                        content_bytes = await render_pdf_from_html(html)
+            except Exception:
+                content_bytes = None
+            if content_bytes is None:
+                # Fallback: reportlab
+                content_bytes, media_type, filename = export_document(document, company, "pdf")
+
+        else:
+            content_bytes, media_type, filename = export_document(document, company, fmt)
+
     except ExportUnavailable as exc:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -298,8 +348,6 @@ async def export_document_route(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         )
-
-    import io
 
     return StreamingResponse(
         io.BytesIO(content_bytes),
