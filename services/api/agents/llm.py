@@ -43,7 +43,7 @@ _DEFAULT_MODELS: dict[str, str] = {
     "anthropic": MODEL,
     "openai": "gpt-4o",
     "google": "gemini-1.5-pro",
-    "deepseek": "deepseek-chat",
+    "deepseek": "deepseek-v4-flash",
 }
 
 _DEFAULT_PROVIDER: str = settings.DEFAULT_LLM_PROVIDER
@@ -57,7 +57,14 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
     "anthropic": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"],
     "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1", "o1-mini"],
     "google": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash"],
-    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    # V4 (deepseek-v4-pro / deepseek-v4-flash) ; chat/reasoner restent jusqu'à
+    # leur dépréciation le 2026-07-24.
+    "deepseek": [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "deepseek-chat",
+        "deepseek-reasoner",
+    ],
 }
 
 
