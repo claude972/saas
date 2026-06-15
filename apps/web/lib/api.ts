@@ -1,4 +1,4 @@
-import { getToken } from "@/lib/auth";
+import { clearToken, getToken } from "@/lib/auth";
 import type {
   Agent,
   ApiSecretInfo,
@@ -77,6 +77,20 @@ async function request<T>(
     });
   } catch {
     throw new Error("Impossible de joindre le backend. Vérifiez qu'il est démarré.");
+  }
+
+  // Session invalide/expirée sur un appel authentifié : on nettoie le token et
+  // on renvoie proprement vers /login (plutôt que d'afficher des cartes d'erreur
+  // « jeton expiré » sur chaque section).
+  if (res.status === 401 && auth) {
+    clearToken();
+    if (
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/login")
+    ) {
+      window.location.href = "/login";
+    }
+    throw new Error("Session expirée — reconnecte-toi.");
   }
 
   if (!res.ok) {

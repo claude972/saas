@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     # Auth / JWT
     JWT_SECRET: str = "dev-secret-change-me"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
+    # Session longue pour un outil interne mono-admin : ~1 an (525600 min) afin de
+    # rester connecté en permanence. Réduire si besoin de sécurité accrue.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 525600
 
     # Single-admin login (credentials from env)
     ADMIN_EMAIL: str = "admin@btp.local"
