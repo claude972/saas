@@ -97,9 +97,23 @@ def _render_header(doc: Any, c: dict) -> str:
 def _render_strip(content: dict) -> str:
     today = _today()
     validity = _e(content.get("validity") or "30 jours")
+    # Cellules optionnelles : début prévu et durée (champs content.start_date / content.duration)
+    start_date = _s(content.get("start_date"))
+    duration = _s(content.get("duration"))
+    optional_cells = ""
+    if start_date:
+        optional_cells += (
+            f'\n    <div class="c"><div class="k">D&eacute;but pr&eacute;vu</div>'
+            f'<div class="v mono">{_e(start_date)}</div></div>'
+        )
+    if duration:
+        optional_cells += (
+            f'\n    <div class="c"><div class="k">Dur&eacute;e</div>'
+            f'<div class="v">{_e(duration)}</div></div>'
+        )
     return f"""  <div class="strip">
     <div class="c"><div class="k">&Eacute;mis le</div><div class="v mono">{today}</div></div>
-    <div class="c"><div class="k">Validit&eacute;</div><div class="v mono">{validity}</div></div>
+    <div class="c"><div class="k">Validit&eacute;</div><div class="v mono">{validity}</div></div>{optional_cells}
     <div class="c"><div class="k">Devis</div><div class="v">Gratuit</div></div>
   </div>"""
 
@@ -282,9 +296,10 @@ def _render_accept(tva_rate: float) -> str:
     if tva_rate < 0.10:
         pct_str = f"{tva_rate * 100:.1f} %".replace(".0 ", " ")
         reduced_mention = (
-            f'<p style="margin-top:8px"><strong>TVA à taux réduit ({_html_mod.escape(pct_str)})</strong>'
-            f" — le client atteste que les travaux portent sur un local d’habitation"
-            f" achevé depuis plus de 2 ans.</p>"
+            f'<p style="margin-top:8px"><strong>TVA &agrave; taux r&eacute;duit ({_html_mod.escape(pct_str)})</strong>'
+            " &mdash; le client atteste que les travaux portent sur un local d&rsquo;habitation"
+            " achev&eacute; depuis plus de 2 ans"
+            " (mention rempla&ccedil;ant l&rsquo;attestation CERFA depuis 2025).</p>"
         )
 
     return f"""    <div class="accept">

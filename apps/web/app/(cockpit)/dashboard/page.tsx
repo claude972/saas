@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-import { RiskBadge } from "@/components/ui/RiskBadge";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
@@ -141,13 +140,6 @@ function withinDays(iso: string, days: number): boolean {
   return Date.now() - d <= days * 86400000;
 }
 
-const RISK_DOT: Record<RiskLevel, string> = {
-  low: "var(--ok)",
-  medium: "var(--amber)",
-  high: "var(--hot)",
-  blocked: "var(--stop)",
-};
-
 const PRIORITY_LABEL: Record<string, { label: string; cls: string }> = {
   high: { label: "Haute", cls: "text-hot" },
   normal: { label: "Normale", cls: "text-text3" },
@@ -155,7 +147,7 @@ const PRIORITY_LABEL: Record<string, { label: string; cls: string }> = {
 };
 
 const LOG_DOT: Record<string, string> = {
-  info: "bg-steel",
+  info: "bg-ok",
   warn: "bg-amber",
   error: "bg-stop",
 };
@@ -361,12 +353,24 @@ export default function DashboardPage() {
 
   /* ---------- render ---------- */
 
+  /* terminal-green token overrides — scoped to dashboard only */
+  const terminalVars = {
+    "--amber":     "#86E0A1",
+    "--amber-2":   "#A8EBB8",
+    "--amber-bg":  "rgba(134,224,161,.12)",
+    "--amber-line":"rgba(134,224,161,.35)",
+    "--amber-fg":  "#08140C",
+    "--ok":        "#86E0A1",
+    "--ok-bg":     "rgba(134,224,161,.14)",
+    "--console-bg":"#0D0F13",
+  } as React.CSSProperties;
+
   if (loading) {
     return (
-      <div className="grid h-full place-items-center">
+      <div className="grid h-full place-items-center" style={terminalVars}>
         <div className="flex flex-col items-center gap-3">
           <Spinner size={26} />
-          <span className="disp text-[11px] uppercase tracking-[0.13em] text-text3">
+          <span className="mono text-[10px] uppercase tracking-[0.2em] text-text3">
             Chargement du cockpit…
           </span>
         </div>
@@ -375,7 +379,10 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="grid min-h-full grid-cols-1 xl:grid-cols-[minmax(0,1fr)_334px]">
+    <div
+      className="grid min-h-full grid-cols-1 xl:grid-cols-[minmax(0,1fr)_334px]"
+      style={terminalVars}
+    >
       {/* ===================== CENTER COLUMN ===================== */}
       <div className="flex min-w-0 flex-col gap-5 px-[22px] py-[18px]">
         {error && (
@@ -388,30 +395,43 @@ export default function DashboardPage() {
         {/* ---- Command center ---- */}
         <Panel accent className="oc-fade pb-3.5">
           <div className="mb-3 flex items-center gap-2.5">
-            <Terminal size={17} strokeWidth={2} className="text-amber" aria-hidden />
-            <span className="disp text-[11.5px] font-semibold uppercase tracking-[0.13em] text-amber-2">
-              Centre de commande · OpenClaw
+            <span className="mono text-[13px] text-amber">&rsaquo;_</span>
+            <span className="mono text-[10px] font-semibold uppercase tracking-[1.2px] text-text2">
+              Centre de commande
+            </span>
+            <span
+              className="mono ml-1 rounded-[5px] border px-2 py-[2px] text-[9px] font-medium uppercase tracking-[0.8px]"
+              style={{
+                color: "var(--amber)",
+                borderColor: "var(--amber-line)",
+                background: "var(--amber-bg)",
+              }}
+            >
+              interne
             </span>
             <span className="ml-auto flex items-center gap-1.5 text-[11px] text-text3">
               <Lock size={13} strokeWidth={2} aria-hidden />
               OpenClaw propose · le backend valide
             </span>
           </div>
-          <div className="flex items-end gap-2.5">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => goToCommand()}
-              className="min-h-[54px] flex-1 rounded-[9px] border border-line bg-bg-2 px-3.5 py-3 text-left text-[13.5px] leading-[1.55] text-text3 transition-colors hover:border-amber-line"
+              className="flex h-[46px] flex-1 items-center gap-2.5 rounded-[11px] border border-line bg-bg-2 px-3.5 text-left transition-colors hover:border-amber-line"
             >
-              Ex : Analyse les photos du chantier Villa Ducos et prépare un devis
-              placo-peinture…
+              <Terminal size={16} strokeWidth={2} className="flex-none text-amber" aria-hidden />
+              <span className="mono flex-1 truncate text-[12.5px] text-text3">
+                Analyse les photos du chantier Villa Ducos…
+              </span>
+              <BlinkCursor />
             </button>
             <button
               type="button"
               onClick={() => goToCommand()}
-              className="disp flex h-[54px] flex-none items-center gap-2 rounded-[9px] bg-amber px-5 text-[13px] font-semibold tracking-[0.04em] text-[var(--amber-fg)] transition-colors hover:bg-amber-2"
+              className="mono flex h-[46px] flex-none items-center gap-2 rounded-[11px] bg-amber px-4 text-[13px] font-semibold text-[var(--amber-fg)] transition-all hover:brightness-110"
             >
-              <Send size={18} strokeWidth={2.2} aria-hidden />
+              <Send size={16} strokeWidth={2.2} aria-hidden />
               Exécuter
             </button>
           </div>
@@ -423,12 +443,12 @@ export default function DashboardPage() {
                   key={c.intent}
                   type="button"
                   onClick={() => goToCommand(c.intent)}
-                  className="group flex items-center gap-[7px] rounded-[20px] border border-line-soft bg-bg-2 px-[11px] py-1.5 text-[12px] text-text2 transition-colors hover:border-amber-line hover:text-text"
+                  className="group flex items-center gap-[7px] rounded-[9px] border border-line-soft bg-bg-2 px-[11px] py-[6px] text-[12px] text-text2 transition-colors hover:border-amber-line hover:text-text"
                 >
                   <Icon
-                    size={15}
+                    size={14}
                     strokeWidth={2}
-                    className="text-text3 transition-colors group-hover:text-amber"
+                    className="text-amber transition-colors"
                     aria-hidden
                   />
                   {c.label}
@@ -438,26 +458,25 @@ export default function DashboardPage() {
           </div>
         </Panel>
 
-        {/* ---- Instrument strip (KPIs) ---- */}
-        <section className="oc-fade flex items-stretch overflow-hidden rounded-[11px] border border-line bg-panel">
-          <StripCell label="OpenClaw" live connected={ocStatus?.connected ?? false} />
-          <StripCell label="Projets actifs" value={activeProjects.length} />
-          <StripCell
+        {/* ---- KPI cards ---- */}
+        <section className="oc-fade grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+          <KpiCard label="OpenClaw" live connected={ocStatus?.connected ?? false} />
+          <KpiCard label="Projets actifs" value={activeProjects.length} />
+          <KpiCard
             label="Sous-agents"
             value={enabledAgents.length}
-            suffix={`/${data.agents.length} actifs`}
+            suffix={`/${data.agents.length}`}
             tone="ok"
           />
-          <StripCell label="Tâches en cours" value={activeTasks.length} />
-          <StripCell label="Validations urgentes" value={pendingApprovals.length} tone="amber" />
-          <StripCell label="Documents · 7 j" value={recentDocs.length} last />
+          <KpiCard label="Tâches en cours" value={activeTasks.length} />
+          <KpiCard label="Validations" value={pendingApprovals.length} tone="amber" accent />
+          <KpiCard label="Docs · 7 j" value={recentDocs.length} />
         </section>
 
         {/* ---- Recent OpenClaw commands ---- */}
         <section className="oc-fade">
           <SectionHeader
-            title="Commandes OpenClaw récentes"
-            count={`· ${recentCommands.length}`}
+            title={`Commandes récentes · ${recentCommands.length}`}
             action={{ label: "Tout voir", href: "/openclaw" }}
           />
           {recentCommands.length === 0 ? (
@@ -522,6 +541,20 @@ export default function DashboardPage() {
             </div>
           )}
         </section>
+
+        {/* ---- Status bar ---- */}
+        <div className="mono flex items-center gap-2 px-[2px] pb-2 text-[10px] text-text3">
+          <span
+            className="h-[6px] w-[6px] flex-none rounded-full"
+            style={{ background: "var(--amber)" }}
+            aria-hidden
+          />
+          <span>
+            backend · {ocStatus?.connected ? "connecté" : "local"}
+            {"  ·  "}modèle anthropic
+            {"  ·  "}⌘K commande
+          </span>
+        </div>
       </div>
 
       {/* ===================== RIGHT RAIL ===================== */}
@@ -532,6 +565,7 @@ export default function DashboardPage() {
             icon={<Bot size={16} strokeWidth={2} className="text-text2" aria-hidden />}
             title="Sous-agents actifs"
             count={`${enabledAgents.length}/${data.agents.length}`}
+            accentCount
           />
           {data.agents.length === 0 ? (
             <EmptyState label="Aucun sous-agent." bare />
@@ -543,9 +577,10 @@ export default function DashboardPage() {
         {/* approvals */}
         <div className="oc-fade overflow-hidden rounded-[10px] border border-line-soft bg-bg-2">
           <RailHeader
-            icon={<ShieldCheck size={16} strokeWidth={2} className="text-hot" aria-hidden />}
+            icon={<ShieldCheck size={16} strokeWidth={2} className="text-amber" aria-hidden />}
             title="Validations urgentes"
             count={pendingApprovals.length}
+            accentCount
           />
           {pendingApprovals.length === 0 ? (
             <EmptyState label="Aucune validation en attente." bare />
@@ -567,15 +602,20 @@ export default function DashboardPage() {
         {/* logs */}
         <div className="oc-fade">
           <div className="mb-2.5 flex items-center gap-2.5">
-            <span className="disp text-[11px] font-semibold uppercase tracking-[0.1em] text-text2">
+            <span className="mono text-[9.5px] font-semibold uppercase tracking-[0.4px] text-text2">
               Logs récents
             </span>
-            <span className="mono text-[11px] text-text3">live</span>
+            <span
+              className="mono rounded-[4px] px-[6px] py-[1px] text-[9px] uppercase tracking-[0.4px]"
+              style={{ color: "var(--amber)", background: "var(--amber-bg)" }}
+            >
+              live
+            </span>
             <Link
               href="/logs"
-              className="ml-auto flex items-center gap-1 text-[11.5px] text-text3 transition-colors hover:text-amber-2"
+              className="mono ml-auto flex items-center gap-1 text-[11px] text-text3 transition-colors hover:text-amber"
             >
-              Console
+              tout voir
               <ArrowRight size={13} strokeWidth={2.2} aria-hidden />
             </Link>
           </div>
@@ -609,14 +649,14 @@ export default function DashboardPage() {
    Sub-components
    ============================================================ */
 
-function StripCell({
+function KpiCard({
   label,
   value,
   suffix,
   tone,
   live = false,
   connected = false,
-  last = false,
+  accent = false,
 }: {
   label: string;
   value?: number;
@@ -624,40 +664,48 @@ function StripCell({
   tone?: "amber" | "ok";
   live?: boolean;
   connected?: boolean;
-  last?: boolean;
+  accent?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "flex flex-1 flex-col gap-[7px] px-4 py-[13px]",
-        !last && "border-r border-line-soft",
+        "flex flex-col gap-[5px] rounded-[13px] border px-3 py-[11px]",
+        accent
+          ? "border-amber-line bg-amber-bg"
+          : "border-line bg-bg-1",
       )}
     >
-      <span className="disp text-[10px] font-semibold uppercase tracking-[0.12em] text-text3">
+      <span
+        className={cn(
+          "mono flex items-center gap-[5px] text-[9px] uppercase tracking-[0.4px]",
+          accent ? "text-amber" : "text-text3",
+        )}
+      >
         {label}
       </span>
       {live ? (
         connected ? (
-          <span className="disp flex items-center gap-[7px] text-[14px] font-semibold uppercase tracking-[0.06em] text-ok">
+          <span className="mono flex items-center gap-[7px] text-[13px] font-medium uppercase tracking-[0.06em] text-amber">
             <Pulse />
             Connecté
           </span>
         ) : (
-          <span className="disp flex items-center gap-[7px] text-[14px] font-semibold uppercase tracking-[0.06em] text-text3">
+          <span className="mono flex items-center gap-[7px] text-[13px] font-medium uppercase tracking-[0.06em] text-text3">
             <span className="h-2 w-2 flex-none rounded-full bg-text3" aria-hidden />
-            Déconnecté
+            Hors ligne
           </span>
         )
       ) : (
         <span
           className={cn(
-            "disp tnum flex items-baseline gap-1.5 text-[26px] font-semibold leading-none",
-            tone === "amber" && "text-amber-2",
-            tone === "ok" && "text-ok",
+            "tnum flex items-baseline gap-1 text-[23px] font-semibold leading-none",
+            tone === "amber" || accent ? "text-amber" : tone === "ok" ? "text-ok" : "text-text",
           )}
         >
           {value ?? 0}
-          {suffix && <small className="text-[12px] font-medium text-text3">{suffix}</small>}
+          {suffix && (
+            <small className="text-[13px] font-medium text-text3">{suffix}</small>
+          )}
         </span>
       )}
     </div>
@@ -674,41 +722,50 @@ function CommandRow({
   const active = isLiveCommand(command);
   const intent = command.intent ?? undefined;
   const agentSlug = intent ? INTENT_TO_AGENT[intent] : undefined;
+  const isValidation = command.status === "waiting_approval";
   return (
     <div
       className={cn(
-        "relative grid grid-cols-[52px_1fr_auto] items-center gap-3.5 border-b border-line-soft px-3.5 py-2.5 last:border-b-0 transition-colors hover:bg-bg-2",
-        active && "bg-[oklch(0.805_0.155_72/.05)]",
+        "relative flex items-center gap-[10px] border-b border-line-soft px-[14px] py-[9px] last:border-b-0 transition-colors hover:bg-bg-2",
+        active && "bg-amber-bg",
       )}
     >
-      {active && <span className="absolute inset-y-0 left-0 w-[2px] bg-amber" aria-hidden />}
-      <span className="mono text-[11px] text-text3">{timeHM(command.created_at)}</span>
-      <div className="min-w-0">
-        <div className="mb-1 truncate text-[13px] text-text">{command.instruction}</div>
-        <div className="flex flex-wrap items-center gap-2">
-          {project && (
-            <span className="inline-flex items-center gap-1.5 rounded-[5px] bg-bg-3 px-2 py-0.5 text-[10.5px] text-text2">
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ background: RISK_DOT[command.risk_level] ?? "var(--text-3)" }}
-                aria-hidden
-              />
-              {project.name}
-            </span>
-          )}
-          {intent && (
-            <span className="mono inline-flex items-center gap-1.5 text-[10.5px] text-text3">
-              {intent}
-              <ArrowRightToLine size={12} strokeWidth={2} aria-hidden />
-              {agentSlug ? <b className="font-medium text-amber-2">{agentSlug}</b> : null}
-            </span>
-          )}
-        </div>
+      {/* status dot */}
+      <span
+        className="h-[7px] w-[7px] flex-none rounded-full"
+        style={{ background: active ? "var(--amber)" : "var(--text-3)" }}
+        aria-hidden
+      />
+      <span className="mono flex-none text-[10.5px] text-text3">{timeHM(command.created_at)}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[12.5px] text-text">{command.instruction}</div>
+        {(intent || project) && (
+          <div className="mono mt-[2px] truncate text-[10px] text-text3">
+            {intent && (
+              <span>
+                {intent}
+                {agentSlug ? ` → ${agentSlug}` : ""}
+              </span>
+            )}
+            {intent && project && " · "}
+            {project && <span>{project.name}</span>}
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-2.5 justify-self-end">
-        <RiskBadge level={command.risk_level} />
+      {isValidation ? (
+        <span
+          className="mono flex-none rounded-[6px] border px-2 py-[3px] text-[10px]"
+          style={{
+            color: "var(--amber)",
+            background: "var(--amber-bg)",
+            borderColor: "var(--amber-line)",
+          }}
+        >
+          validation
+        </span>
+      ) : (
         <StatusChip status={command.status} />
-      </div>
+      )}
     </div>
   );
 }
@@ -814,46 +871,71 @@ function RailHeader({
   icon,
   title,
   count,
+  accentCount = false,
 }: {
   icon: React.ReactNode;
   title: string;
   count: string | number;
+  accentCount?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2 border-b border-line-soft px-3 py-2.5">
+    <div className="flex items-center gap-2 border-b border-line-soft px-3 py-[11px]">
       {icon}
-      <span className="disp text-[11px] font-semibold uppercase tracking-[0.11em] text-text2">
+      <span className="mono text-[9.5px] font-semibold uppercase tracking-[0.4px] text-text2">
         {title}
       </span>
-      <span className="mono ml-auto text-[10.5px] text-text3">{count}</span>
+      <span
+        className="mono ml-auto rounded-[5px] border px-[7px] py-[2px] text-[10px]"
+        style={
+          accentCount
+            ? { color: "var(--amber)", background: "var(--amber-bg)", borderColor: "var(--amber-line)" }
+            : { color: "var(--text-2)", background: "transparent", borderColor: "transparent" }
+        }
+      >
+        {count}
+      </span>
     </div>
   );
 }
 
 function AgentRow({ agent }: { agent: Agent }) {
   const Icon = AGENT_ICON[agent.slug] ?? Bot;
-  const running = agent.status === "running";
+  const online = agent.enabled;
   return (
-    <div className="flex items-center gap-2.5 border-b border-line-soft px-3 py-2.5 last:border-b-0 transition-colors hover:bg-bg-3">
-      <div
-        className={cn(
-          "relative grid h-[30px] w-[30px] flex-none place-items-center rounded-[7px]",
-          running ? "bg-amber-bg text-amber" : "bg-bg-3 text-text2",
-        )}
-      >
-        <Icon size={16} strokeWidth={2} aria-hidden />
-        {running && (
-          <span className="absolute -bottom-0.5 -right-0.5 h-[9px] w-[9px] rounded-full border-2 border-bg-2 bg-amber" />
+    <div className="flex items-center gap-[9px] border-b border-line-soft px-3 py-[7px] last:border-b-0 transition-colors hover:bg-bg-3">
+      <div className="relative flex-none">
+        <div className="grid h-[27px] w-[27px] place-items-center rounded-[7px] bg-bg-3 text-text2">
+          <Icon size={15} strokeWidth={2} aria-hidden />
+        </div>
+        {online && (
+          <span
+            className="absolute -bottom-[2px] -right-[2px] h-[8px] w-[8px] rounded-full border-2"
+            style={{
+              background: "var(--amber)",
+              borderColor: "var(--bg-2)",
+            }}
+            aria-hidden
+          />
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[12.5px] font-medium text-text">{agent.name}</div>
-        <div className="truncate text-[10.5px] text-text3">{agent.role}</div>
+        <div className="truncate text-[11.5px] font-medium text-text">{agent.name}</div>
+        <div className="mono truncate text-[9.5px] text-text3">{agent.slug}</div>
       </div>
-      <div className="flex flex-none flex-col items-end gap-1.5">
-        <RiskBadge level={agent.risk_level} />
-        <span className="mono text-[10px] text-text3">v{agent.version}</span>
-      </div>
+      <span
+        className="mono flex-none rounded-[5px] border px-[6px] py-[2px] text-[8.5px] uppercase tracking-[0.4px]"
+        style={
+          agent.risk_level === "medium" || agent.risk_level === "high"
+            ? { color: "var(--amber)", background: "var(--amber-bg)", borderColor: "var(--amber-line)" }
+            : { color: "var(--text-2)", background: "var(--bg-2)", borderColor: "var(--line)" }
+        }
+      >
+        {agent.risk_level === "high"
+          ? "élevé"
+          : agent.risk_level === "medium"
+          ? "moyen"
+          : "faible"}
+      </span>
     </div>
   );
 }
@@ -873,51 +955,54 @@ function ApprovalRow({
   onAccept: () => void;
   onReject: () => void;
 }) {
-  const med = approval.risk_level === "medium";
   return (
-    <div
-      className="relative border-b border-line-soft border-l-[3px] p-3 last:border-b-0"
-      style={{ borderLeftColor: med ? "var(--amber)" : "var(--hot)" }}
-    >
-      <div className="mb-[7px] text-[12.5px] font-medium leading-[1.4] text-text">
-        {approval.title}
-      </div>
-      <div className="mb-2.5 flex flex-wrap items-center gap-2">
-        <RiskBadge level={approval.risk_level} />
-        {project && (
-          <span className="inline-flex items-center gap-1.5 rounded-[5px] bg-bg-3 px-2 py-0.5 text-[10.5px] text-text2">
+    <div className="border-b border-line-soft p-3 last:border-b-0">
+      <div
+        className="rounded-[10px] border p-[10px] pb-[11px]"
+        style={{ background: "var(--bg-2)", borderColor: "var(--line)" }}
+      >
+        <div className="mb-[6px] flex items-center justify-between gap-2">
+          <span className="text-[11.5px] font-semibold text-text">{approval.title}</span>
+          <span className="mono flex-none text-[10px] text-text3">{relTime(approval.created_at)}</span>
+        </div>
+        {(project || agent) && (
+          <div className="mb-[11px] flex items-center gap-[5px]">
             <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: RISK_DOT[approval.risk_level] ?? "var(--text-3)" }}
+              className="h-[6px] w-[6px] flex-none rounded-full"
+              style={{ background: "var(--amber)" }}
               aria-hidden
             />
-            {project.name}
-          </span>
+            <span className="truncate text-[10.5px] text-text2">
+              {project?.name ?? ""}
+              {agent && project ? ` – ${agent.slug}` : agent?.slug ?? ""}
+            </span>
+          </div>
         )}
-        <span className="mono text-[10.5px] text-text3">
-          {agent ? `${agent.slug} · ` : ""}
-          {relTime(approval.created_at)}
-        </span>
-      </div>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onAccept}
-          disabled={busy}
-          className="disp flex flex-1 items-center justify-center gap-1.5 rounded-[7px] border border-[oklch(0.77_0.14_152/.3)] bg-ok-bg py-[7px] text-[11.5px] font-semibold tracking-[0.04em] text-ok transition-colors hover:bg-[oklch(0.77_0.14_152/.22)] disabled:opacity-50"
-        >
-          {busy ? <Spinner size={14} /> : <Check size={15} strokeWidth={2.2} aria-hidden />}
-          Accepter
-        </button>
-        <button
-          type="button"
-          onClick={onReject}
-          disabled={busy}
-          className="disp flex flex-1 items-center justify-center gap-1.5 rounded-[7px] border border-line py-[7px] text-[11.5px] font-semibold tracking-[0.04em] text-text2 transition-colors hover:border-[oklch(0.635_0.20_28/.3)] hover:bg-stop-bg hover:text-stop disabled:opacity-50"
-        >
-          <X size={15} strokeWidth={2.2} aria-hidden />
-          Refuser
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onAccept}
+            disabled={busy}
+            className="mono flex flex-1 items-center justify-center gap-[5px] rounded-[8px] border py-[7px] text-[11.5px] font-semibold transition-all disabled:opacity-50 hover:brightness-110"
+            style={{
+              background: "var(--amber)",
+              borderColor: "var(--amber)",
+              color: "var(--amber-fg)",
+            }}
+          >
+            {busy ? <Spinner size={14} /> : <Check size={14} strokeWidth={2.2} aria-hidden />}
+            Accepter
+          </button>
+          <button
+            type="button"
+            onClick={onReject}
+            disabled={busy}
+            className="mono flex flex-1 items-center justify-center gap-[5px] rounded-[8px] border border-line py-[7px] text-[11.5px] font-medium text-text2 transition-colors hover:border-stop hover:text-stop disabled:opacity-50"
+          >
+            <X size={14} strokeWidth={2.2} aria-hidden />
+            Refuser
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -977,6 +1062,16 @@ function Pulse() {
         aria-hidden
       />
     </span>
+  );
+}
+
+function BlinkCursor() {
+  return (
+    <span
+      className="inline-block h-[15px] w-[7px] flex-none rounded-[1px] bg-amber"
+      style={{ animation: "oc-blink 1.1s steps(1) infinite" }}
+      aria-hidden
+    />
   );
 }
 
