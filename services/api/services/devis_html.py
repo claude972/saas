@@ -49,6 +49,18 @@ def _e(value: Any) -> str:
     return _html_mod.escape(_s(value))
 
 
+# Nom de société par défaut (placeholder) : non affiché sur le document, le
+# logo OM2 portant l'identité visuelle. Si une vraie raison sociale est
+# configurée, elle s'affiche normalement.
+_PLACEHOLDER_NAME = "Mon Entreprise BTP"
+
+
+def _display_name(name: Any) -> str:
+    """Return the company name, or '' when it is the default placeholder."""
+    s = _s(name).strip()
+    return "" if s == _PLACEHOLDER_NAME else s
+
+
 def _today() -> str:
     return datetime.now().strftime("%d/%m/%Y")
 
@@ -70,21 +82,22 @@ def _derive_number(doc: Any) -> str:
 # Brand assets
 # ---------------------------------------------------------------------------
 
-# Logo OM² (Rénovation · Agencement) — SVG inline, blanc sur fond noir de
-# l'en-tête, anneau et exposant rouge accent #E30613. Utilisé par défaut
-# lorsqu'aucun logo personnalisé (logo_url) n'est configuré.
-_OM2_LOGO_SVG = (
-    '<svg class="logo" viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg"'
-    ' role="img" aria-label="OM2 — Rénovation Agencement">'
-    '<circle cx="36" cy="40" r="28" fill="none" stroke="#E30613" stroke-width="15"/>'
-    '<text x="78" y="62" font-family="Inter,Arial,sans-serif" font-size="62"'
-    ' font-weight="700" fill="#ffffff">M</text>'
-    '<text x="138" y="34" font-family="Inter,Arial,sans-serif" font-size="30"'
-    ' font-weight="700" fill="#E30613">2</text>'
-    '<text x="8" y="90" font-family="Inter,Arial,sans-serif" font-size="12"'
-    ' letter-spacing="3.5" fill="#9aa0ac">R&#201;NOVATION &#183; AGENCEMENT</text>'
-    '</svg>'
-)
+# Logo OM² (Rénovation · Agencement) — SVG inline, anneau et exposant rouge
+# accent #E30613. Le « M » prend la couleur passée en paramètre : blanc pour
+# l'en-tête (fond noir), foncé pour la carte émetteur (fond clair).
+def _om2_logo_svg(css_class: str = "logo", m_color: str = "#ffffff") -> str:
+    return (
+        f'<svg class="{css_class}" viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg"'
+        ' role="img" aria-label="OM2 — Rénovation Agencement">'
+        '<circle cx="36" cy="40" r="28" fill="none" stroke="#E30613" stroke-width="15"/>'
+        '<text x="78" y="62" font-family="Inter,Arial,sans-serif" font-size="62"'
+        f' font-weight="700" fill="{m_color}">M</text>'
+        '<text x="138" y="34" font-family="Inter,Arial,sans-serif" font-size="30"'
+        ' font-weight="700" fill="#E30613">2</text>'
+        '<text x="8" y="90" font-family="Inter,Arial,sans-serif" font-size="12"'
+        ' letter-spacing="3.5" fill="#9aa0ac">R&#201;NOVATION &#183; AGENCEMENT</text>'
+        '</svg>'
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -100,14 +113,13 @@ def _render_header(doc: Any, c: dict) -> str:
     if logo_url:
         logo_block = f'<img class="logo" src="{_html_mod.escape(logo_url)}" alt="{company_name}">'
     else:
-        logo_block = _OM2_LOGO_SVG
+        logo_block = _om2_logo_svg("logo", "#ffffff")
 
     return f"""  <header>
     {logo_block}
     <div class="right">
       <div class="k">Devis</div>
       <div class="n"><span class="h">#</span>{number}</div>
-      <div class="tag">{company_name}</div>
     </div>
   </header>"""
 
@@ -132,13 +144,19 @@ def _render_strip(content: dict) -> str:
     return f"""  <div class="strip">
     <div class="c"><div class="k">&Eacute;mis le</div><div class="v mono">{today}</div></div>
     <div class="c"><div class="k">Validit&eacute;</div><div class="v mono">{validity}</div></div>{optional_cells}
-    <div class="c"><div class="k">Devis</div><div class="v">Gratuit</div></div>
   </div>"""
 
 
-def _render_parties(content: dict, c: dict) -> str:
-    # Emitter card
-    emitter_name = _e(c["name"])
+def _render_parties(content: dict, c: dict, devis_title: str = "") -> str:
+    # Emitter card — logo OM2 (ou logo personnalisé) au-dessus du nom.
+    # Le nom par défaut "Mon Entreprise BTP" (placeholder) n'est pas affiché :
+    # l'identité visuelle repose sur le logo.
+    emitter_name = _e(_display_name(c["name"]))
+    logo_url = _s(c.get("logo_url", ""))
+    if logo_url:
+        emitter_logo = f'<img class="brand" src="{_html_mod.escape(logo_url)}" alt="{emitter_name}">'
+    else:
+        emitter_logo = _om2_logo_svg("brand", "#0A0A0A")
     emitter_lines: list[str] = []
     if c["address"]:
         emitter_lines.append(_e(c["address"]))
@@ -152,9 +170,11 @@ def _render_parties(content: dict, c: dict) -> str:
         emitter_lines.append(f"N&deg; TVA&nbsp;: {_e(c['vat_number'])}")
     emitter_detail = "<br>".join(emitter_lines) if emitter_lines else ""
 
-    # Client card
-    client_name = _e(content.get("client_name") or "Client")
+    # Client card — nom = titre du devis, coordonnées client conservées
+    client_name = _e(devis_title or content.get("client_name") or "Devis")
     client_lines: list[str] = []
+    if content.get("client_name") and devis_title:
+        client_lines.append(_e(content["client_name"]))
     if content.get("client_address"):
         client_lines.append(_e(content["client_address"]))
     if content.get("client_email"):
@@ -169,7 +189,8 @@ def _render_parties(content: dict, c: dict) -> str:
     return f"""    <div class="parties">
       <div class="card">
         <div class="label">&Eacute;metteur</div>
-        <div class="name">{emitter_name}</div>
+        {emitter_logo}
+        {f'<div class="name">{emitter_name}</div>' if emitter_name else ''}
         {emitter_detail_html}
       </div>
       <div class="card">
@@ -310,23 +331,11 @@ def _render_foot(content: dict, total_ht: float, total_tva: float, total_ttc: fl
 
 
 def _render_accept(tva_rate: float) -> str:
-    # Show TVA-reduced mention if rate < 10 % (e.g. 2.1 % or 5.5 %)
-    reduced_mention = ""
-    if tva_rate < 0.10:
-        pct_str = f"{tva_rate * 100:.1f} %".replace(".0 ", " ")
-        reduced_mention = (
-            f'<p style="margin-top:8px"><strong>TVA &agrave; taux r&eacute;duit ({_html_mod.escape(pct_str)})</strong>'
-            " &mdash; le client atteste que les travaux portent sur un local d&rsquo;habitation"
-            " achev&eacute; depuis plus de 2 ans"
-            " (mention rempla&ccedil;ant l&rsquo;attestation CERFA depuis 2025).</p>"
-        )
-
     return f"""    <div class="accept">
       <div class="txt">
         <h4>Bon pour accord</h4>
         <p>&Agrave; retourner dat&eacute; et sign&eacute;. La signature transforme ce devis en contrat liant les deux parties. Recopier la mention manuscrite&nbsp;:</p>
         <p class="hand">&laquo;&nbsp;Devis re&ccedil;u avant l&rsquo;ex&eacute;cution des travaux, lu et accept&eacute;, bon pour accord.&nbsp;&raquo;</p>
-        {reduced_mention}
       </div>
       <div class="sign">
         <div class="k">Date &amp; signature du client</div>
@@ -336,19 +345,16 @@ def _render_accept(tva_rate: float) -> str:
 
 
 def _render_footer(content: dict, c: dict) -> str:
-    # Column 1 — Entreprise
-    company_name = _e(c["name"])
+    # Column 1 — Entreprise (le placeholder "Mon Entreprise BTP" est masqué)
+    company_name = _e(_display_name(c["name"]))
     company_lines: list[str] = []
     if c["siret"]:
         company_lines.append(f"SIRET {_e(c['siret'])}")
     if c["vat_number"]:
         company_lines.append(f"TVA {_e(c['vat_number'])}")
     company_detail = " &middot; ".join(company_lines) if company_lines else ""
-    col1 = (
-        f"<div><h5>Entreprise</h5>{company_name}"
-        + (f"<br>{company_detail}" if company_detail else "")
-        + "</div>"
-    )
+    company_body = "<br>".join(part for part in (company_name, company_detail) if part)
+    col1 = f"<div><h5>Entreprise</h5>{company_body}</div>"
 
 
     # Column 2 — Mentions légales
@@ -409,9 +415,10 @@ def render_devis_html(doc: Any, company: Any) -> str:
             merged.update(stripped)     # override with sanitised core fields
             render_lines.append(merged)
 
+        devis_title = _s(getattr(doc, "title", ""))
         header_html = _render_header(doc, c)
         strip_html = _render_strip(content)
-        parties_html = _render_parties(content, c)
+        parties_html = _render_parties(content, c, devis_title)
         table_html = _render_lines_table(render_lines, tva_rate) if render_lines else ""
         foot_html = _render_foot(content, total_ht, total_tva, total_ttc, tva_rate)
         accept_html = _render_accept(tva_rate)
@@ -462,6 +469,7 @@ def render_devis_html(doc: Any, company: Any) -> str:
   .parties{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}}
   .card{{border:1px solid var(--g200);border-radius:12px;padding:14px 16px}}
   .card .label{{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--g400);margin-bottom:7px}}
+  .card .brand{{height:32px;width:auto;display:block;margin-bottom:8px}}
   .card .name{{font-size:14px;font-weight:600;margin-bottom:3px}}
   .card .line{{font-size:11.5px;color:var(--g600);line-height:1.6}}
 
