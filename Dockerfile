@@ -16,8 +16,17 @@ WORKDIR /app
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
 
-# Copy the frontend source and build it.
+# Copy the frontend source.
 COPY apps/web/ ./
+
+# NEXT_PUBLIC_* variables are inlined into the bundle at BUILD time. A Docker
+# build does not automatically receive Railway service variables — they must be
+# declared as ARG here so Railway passes them in. Without this, the build falls
+# back to the localhost default in lib/api.ts and the frontend can't reach the
+# API. Set NEXT_PUBLIC_API_URL in the Railway "web" service variables.
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
 RUN npm run build
 
 EXPOSE 3000
