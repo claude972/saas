@@ -49,6 +49,18 @@ def _e(value: Any) -> str:
     return _html_mod.escape(_s(value))
 
 
+# Nom de société par défaut (placeholder) : non affiché sur le document, le
+# logo OM2 portant l'identité visuelle. Si une vraie raison sociale est
+# configurée, elle s'affiche normalement.
+_PLACEHOLDER_NAME = "Mon Entreprise BTP"
+
+
+def _display_name(name: Any) -> str:
+    """Return the company name, or '' when it is the default placeholder."""
+    s = _s(name).strip()
+    return "" if s == _PLACEHOLDER_NAME else s
+
+
 def _today() -> str:
     return datetime.now().strftime("%d/%m/%Y")
 
@@ -136,8 +148,10 @@ def _render_strip(content: dict) -> str:
 
 
 def _render_parties(content: dict, c: dict, devis_title: str = "") -> str:
-    # Emitter card — logo OM2 (ou logo personnalisé) au-dessus du nom
-    emitter_name = _e(c["name"])
+    # Emitter card — logo OM2 (ou logo personnalisé) au-dessus du nom.
+    # Le nom par défaut "Mon Entreprise BTP" (placeholder) n'est pas affiché :
+    # l'identité visuelle repose sur le logo.
+    emitter_name = _e(_display_name(c["name"]))
     logo_url = _s(c.get("logo_url", ""))
     if logo_url:
         emitter_logo = f'<img class="brand" src="{_html_mod.escape(logo_url)}" alt="{emitter_name}">'
@@ -176,7 +190,7 @@ def _render_parties(content: dict, c: dict, devis_title: str = "") -> str:
       <div class="card">
         <div class="label">&Eacute;metteur</div>
         {emitter_logo}
-        <div class="name">{emitter_name}</div>
+        {f'<div class="name">{emitter_name}</div>' if emitter_name else ''}
         {emitter_detail_html}
       </div>
       <div class="card">
@@ -331,19 +345,16 @@ def _render_accept(tva_rate: float) -> str:
 
 
 def _render_footer(content: dict, c: dict) -> str:
-    # Column 1 — Entreprise
-    company_name = _e(c["name"])
+    # Column 1 — Entreprise (le placeholder "Mon Entreprise BTP" est masqué)
+    company_name = _e(_display_name(c["name"]))
     company_lines: list[str] = []
     if c["siret"]:
         company_lines.append(f"SIRET {_e(c['siret'])}")
     if c["vat_number"]:
         company_lines.append(f"TVA {_e(c['vat_number'])}")
     company_detail = " &middot; ".join(company_lines) if company_lines else ""
-    col1 = (
-        f"<div><h5>Entreprise</h5>{company_name}"
-        + (f"<br>{company_detail}" if company_detail else "")
-        + "</div>"
-    )
+    company_body = "<br>".join(part for part in (company_name, company_detail) if part)
+    col1 = f"<div><h5>Entreprise</h5>{company_body}</div>"
 
 
     # Column 2 — Mentions légales
