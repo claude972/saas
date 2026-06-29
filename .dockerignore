@@ -1,0 +1,13 @@
+# Keep the Docker build context small. The root Dockerfile only builds the
+# Next.js frontend (apps/web), so exclude heavy/irrelevant paths.
+**/node_modules
+**/.next
+**/out
+**/build
+.git
+**/*.tsbuildinfo
+**/.env*.local
+**/.DS_Store
+services
+design
+docs
