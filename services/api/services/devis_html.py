@@ -67,6 +67,27 @@ def _derive_number(doc: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Brand assets
+# ---------------------------------------------------------------------------
+
+# Logo OM² (Rénovation · Agencement) — SVG inline, blanc sur fond noir de
+# l'en-tête, anneau et exposant rouge accent #E30613. Utilisé par défaut
+# lorsqu'aucun logo personnalisé (logo_url) n'est configuré.
+_OM2_LOGO_SVG = (
+    '<svg class="logo" viewBox="0 0 320 96" xmlns="http://www.w3.org/2000/svg"'
+    ' role="img" aria-label="OM2 — Rénovation Agencement">'
+    '<circle cx="36" cy="40" r="28" fill="none" stroke="#E30613" stroke-width="15"/>'
+    '<text x="78" y="62" font-family="Inter,Arial,sans-serif" font-size="62"'
+    ' font-weight="700" fill="#ffffff">M</text>'
+    '<text x="138" y="34" font-family="Inter,Arial,sans-serif" font-size="30"'
+    ' font-weight="700" fill="#E30613">2</text>'
+    '<text x="8" y="90" font-family="Inter,Arial,sans-serif" font-size="12"'
+    ' letter-spacing="3.5" fill="#9aa0ac">R&#201;NOVATION &#183; AGENCEMENT</text>'
+    '</svg>'
+)
+
+
+# ---------------------------------------------------------------------------
 # Sub-renderers
 # ---------------------------------------------------------------------------
 
@@ -79,10 +100,7 @@ def _render_header(doc: Any, c: dict) -> str:
     if logo_url:
         logo_block = f'<img class="logo" src="{_html_mod.escape(logo_url)}" alt="{company_name}">'
     else:
-        logo_block = (
-            f'<div style="color:#fff;font-size:20px;font-weight:700;letter-spacing:.04em;">'
-            f'{company_name}</div>'
-        )
+        logo_block = _OM2_LOGO_SVG
 
     return f"""  <header>
     {logo_block}
@@ -269,9 +287,10 @@ def _render_foot(content: dict, total_ht: float, total_tva: float, total_ttc: fl
     )
 
     if tva_rate * 100 == int(tva_rate * 100):
-        tva_label = f"TVA {int(tva_rate * 100)} %"
+        tva_pct = f"{int(tva_rate * 100)} %"
     else:
-        tva_label = f"TVA {tva_rate * 100:.1f} %"
+        tva_pct = f"{tva_rate * 100:.1f} %".replace(".", ",")
+    tva_label = f"TVA \u00e0 taux r\u00e9duit ({tva_pct})"
 
     return f"""    <div class="foot">
       <div class="pay">
@@ -331,18 +350,8 @@ def _render_footer(content: dict, c: dict) -> str:
         + "</div>"
     )
 
-    # Column 2 — Assurance décennale
-    assurance = _s(content.get("assurance"))
-    if assurance:
-        col2 = f"<div><h5>Assurance d&eacute;cennale</h5>{_e(assurance)}</div>"
-    else:
-        col2 = (
-            "<div><h5>Assurance d&eacute;cennale</h5>"
-            "Souscrite auprès de [Assureur], police n° [XXXXXXX].<br>"
-            "Couverture : France métropolitaine.</div>"
-        )
 
-    # Column 3 — Mentions légales
+    # Column 2 — Mentions légales
     legal = _s(c.get("legal_mentions"))
     if legal:
         legal_lines = [_e(line.strip()) for line in legal.splitlines() if line.strip()]
@@ -354,12 +363,11 @@ def _render_footer(content: dict, c: dict) -> str:
             "Médiation conso : [médiateur].<br>"
             "Conforme à l’arrêté du 24/01/2017."
         )
-    col3 = f"<div><h5>Mentions</h5>{col3_body}</div>"
+    col2 = f"<div><h5>Mentions</h5>{col3_body}</div>"
 
     return f"""  <footer>
     {col1}
     {col2}
-    {col3}
   </footer>"""
 
 
@@ -489,7 +497,7 @@ def render_devis_html(doc: Any, company: Any) -> str:
   .accept .sign .k{{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--g400)}}
   .accept .sign .box{{height:54px;border-bottom:1px solid var(--g400);margin-top:6px}}
 
-  footer{{margin:24px 26mm 0;border-top:2px solid var(--noir);padding:14px 0 26px;font-size:9px;color:var(--g600);line-height:1.6;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}}
+  footer{{margin:24px 26mm 0;border-top:2px solid var(--noir);padding:14px 0 26px;font-size:9px;color:var(--g600);line-height:1.6;display:grid;grid-template-columns:repeat(2,1fr);gap:14px}}
   footer h5{{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--noir);margin-bottom:4px}}
   .ribbon{{position:absolute;bottom:0;left:0;right:0;height:5px;background:linear-gradient(90deg,var(--noir) 0 62%,var(--rouge) 62% 100%)}}
 
