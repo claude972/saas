@@ -13,7 +13,7 @@ import { Spinner } from "@/components/ui/Spinner";
 /* ------------------------------------------------------------------ */
 
 const FORMAT_LABELS: Record<ExportFormat, string> = {
-  pdf: "PDF",
+  pdf: "PDF OM2",
   docx: "Word",
   xlsx: "Excel",
   obat: "Obat",
