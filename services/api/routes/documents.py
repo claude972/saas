@@ -284,10 +284,10 @@ async def export_document_route(
             detail="Document introuvable.",
         )
 
-    if fmt not in ("pdf", "docx", "xlsx", "obat", "ced"):
+    if fmt not in ("pdf", "docx", "xlsx", "obat", "ced", "suivisio"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Format non supporté: '{fmt}'. Valeurs acceptées: pdf, docx, xlsx, obat, ced.",
+            detail=f"Format non supporté: '{fmt}'. Valeurs acceptées: pdf, docx, xlsx, obat, ced, suivisio.",
         )
 
     company = await _load_company(db)
@@ -312,13 +312,14 @@ async def export_document_route(
                         ),
                     )
 
-        elif fmt == "ced":
-            # CED-branded PDF (green accent + CED logo). Devis/DPGF only,
+        elif fmt in ("ced", "suivisio"):
+            # Branded PDF variant (CED = vert, Suivisio = bleu). Devis/DPGF only,
             # requires the Chromium HTML renderer (no reportlab equivalent).
+            brand_label = fmt.upper() if fmt == "ced" else "Suivisio"
             if getattr(document, "document_type", None) not in ("quote", "dpgf"):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="L'export CED ne concerne que les devis (quote/dpgf).",
+                    detail=f"L'export {brand_label} ne concerne que les devis (quote/dpgf).",
                 )
             from services.devis_html import render_devis_html
             from services.exporters import _filename_stem, _s
@@ -327,18 +328,18 @@ async def export_document_route(
             if not pdf_render_available():
                 raise HTTPException(
                     status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                    detail="Rendu PDF (Chromium) indisponible pour l'export CED.",
+                    detail=f"Rendu PDF (Chromium) indisponible pour l'export {brand_label}.",
                 )
-            html = render_devis_html(document, company, brand="ced")
+            html = render_devis_html(document, company, brand=fmt)
             if "<tr" not in html:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="Impossible de générer l'export CED pour ce document (contenu vide).",
+                    detail=f"Impossible de générer l'export {brand_label} pour ce document (contenu vide).",
                 )
             content_bytes = await render_pdf_from_html(html)
             media_type = "application/pdf"
             stem = _filename_stem(_s(getattr(document, "title", "document")) or "document")
-            filename = f"{stem}-CED.pdf"
+            filename = f"{stem}-{brand_label.upper()}.pdf"
 
         elif fmt == "pdf" and getattr(document, "document_type", None) in ("quote", "dpgf"):
             # Attempt branded Chromium PDF; fall back to reportlab on any failure.

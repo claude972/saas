@@ -294,6 +294,7 @@ export default function DocumentPage() {
             showXlsx={doc.document_type === "quote" || doc.document_type === "dpgf"}
             showObat={doc.document_type === "quote" || doc.document_type === "dpgf"}
             showCed={doc.document_type === "quote" || doc.document_type === "dpgf"}
+            showSuivisio={doc.document_type === "quote" || doc.document_type === "dpgf"}
           />
         </div>
 

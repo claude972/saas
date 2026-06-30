@@ -30,6 +30,26 @@ from services.exporters import _ch, _lst, _parse_quote, _s
 # Accent colours per brand variant.
 _OM2_RED = "#E30613"
 _CED_GREEN = "#0A8A0A"
+_SUIVISIO_BLUE = "#1184CC"
+
+# Bundled brand variants: embedded logo + accent colour. "om2" stays handled
+# separately (inline SVG logo + custom company logo + masked placeholder name).
+#   header_logo  — shown on the black header (must read on a dark background)
+#   emitter_logo — shown in the white "Émetteur" card
+_BRANDS = {
+    "ced": {
+        "accent": _CED_GREEN,
+        "header_logo": "ced-logo.png",
+        "emitter_logo": "ced-logo-noir.png",
+        "name": "CED",
+    },
+    "suivisio": {
+        "accent": _SUIVISIO_BLUE,
+        "header_logo": "suivisio-logo-blanc.png",
+        "emitter_logo": "suivisio-logo.png",
+        "name": "Suivisio",
+    },
+}
 
 _BRAND_ASSETS = Path(__file__).resolve().parent / "brand_assets"
 
@@ -133,14 +153,15 @@ def _render_header(doc: Any, c: dict, brand: str = "om2") -> str:
     number = _e(_derive_number(doc))
     company_name = _e(c["name"])
 
-    if brand == "ced":
-        # CED variant: bundled green logo on the black header, no company tag.
-        ced_logo = _asset_data_uri("ced-logo.png")
-        if ced_logo:
-            logo_block = f'<img class="logo" src="{ced_logo}" alt="CED">'
+    if brand in _BRANDS:
+        # Bundled brand: embedded logo on the black header, no company tag.
+        name = _BRANDS[brand]["name"]
+        logo = _asset_data_uri(_BRANDS[brand]["header_logo"])
+        if logo:
+            logo_block = f'<img class="logo" src="{logo}" alt="{name}">'
         else:
             logo_block = (
-                '<div style="color:#fff;font-size:20px;font-weight:700;letter-spacing:.04em;">CED</div>'
+                f'<div style="color:#fff;font-size:20px;font-weight:700;letter-spacing:.04em;">{name}</div>'
             )
     else:
         logo_block = _om2_logo_svg("logo", "#ffffff")
@@ -182,11 +203,11 @@ def _render_parties(content: dict, c: dict, brand: str = "om2", devis_title: str
     # Le nom par défaut "Mon Entreprise BTP" (placeholder) n'est pas affiché :
     # l'identité visuelle repose sur le logo.
     emitter_name = _e(_display_name(c["name"]))
-    if brand == "ced":
-        ced_logo_dark = _asset_data_uri("ced-logo-noir.png")
+    if brand in _BRANDS:
+        elogo = _asset_data_uri(_BRANDS[brand]["emitter_logo"])
         emitter_logo = (
-            f'<img class="brand" src="{ced_logo_dark}" alt="CED">'
-            if ced_logo_dark
+            f'<img class="brand" src="{elogo}" alt="{_BRANDS[brand]["name"]}">'
+            if elogo
             else _om2_logo_svg("brand", "#0A0A0A")
         )
     else:
@@ -383,9 +404,9 @@ def _render_accept(tva_rate: float) -> str:
 
 
 def _render_footer(content: dict, c: dict, brand: str = "om2") -> str:
-    # Column 1 — Entreprise. CED → nom de marque ; sinon le placeholder
-    # "Mon Entreprise BTP" est masqué.
-    company_name = "CED" if brand == "ced" else _e(_display_name(c["name"]))
+    # Column 1 — Entreprise. Marque embarquée → nom de marque ; sinon le
+    # placeholder "Mon Entreprise BTP" est masqué.
+    company_name = _BRANDS[brand]["name"] if brand in _BRANDS else _e(_display_name(c["name"]))
     company_lines: list[str] = []
     if c["siret"]:
         company_lines.append(f"SIRET {_e(c['siret'])}")
@@ -428,15 +449,16 @@ def render_devis_html(doc: Any, company: Any, brand: str = "om2") -> str:
         doc:     Document ORM row (or any object with ``content``, ``id``,
                  ``title``, ``document_type`` attributes).
         company: CompanySettings ORM row, or ``None``.
-        brand:   ``"om2"`` (default — red accent, company logo) or ``"ced"``
-                 (green accent, bundled CED logo, black emitter logo,
-                 two-column footer).
+        brand:   ``"om2"`` (default — red accent, company logo), ``"ced"``
+                 (green accent, bundled CED logo) or ``"suivisio"`` (blue
+                 accent, bundled SUIVISIO logo). Bundled brands use a white
+                 header logo, a coloured emitter logo and a two-column footer.
 
     Returns:
         A self-contained HTML string suitable for Chromium PDF rendering.
         Never raises; missing data yields empty/masked sections.
     """
-    accent = _CED_GREEN if brand == "ced" else _OM2_RED
+    accent = _BRANDS[brand]["accent"] if brand in _BRANDS else _OM2_RED
     try:
         content: dict = getattr(doc, "content", None) or {}
         c = _ch(company)

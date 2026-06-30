@@ -18,6 +18,7 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
   xlsx: "Excel",
   obat: "Obat",
   ced: "CED",
+  suivisio: "Suivisio",
 };
 
 const FORMAT_MIMES: Record<ExportFormat, string> = {
@@ -26,6 +27,7 @@ const FORMAT_MIMES: Record<ExportFormat, string> = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   obat: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ced: "application/pdf",
+  suivisio: "application/pdf",
 };
 
 const ALL_FORMATS: ExportFormat[] = ["pdf", "docx", "xlsx"];
@@ -62,7 +64,7 @@ async function downloadExport(documentId: string, format: ExportFormat): Promise
   // Determine filename from Content-Disposition or fall back to generic name.
   // The fallback extension is the file type, not the export format key
   // ("ced" is a PDF variant → .pdf).
-  const fallbackExt = format === "ced" ? "pdf" : format;
+  const fallbackExt = format === "ced" || format === "suivisio" ? "pdf" : format;
   const disposition = res.headers.get("Content-Disposition") ?? "";
   const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
   const filename = match?.[1]?.replace(/['"]/g, "") ?? `document.${fallbackExt}`;
@@ -88,16 +90,19 @@ interface ExportBarProps {
   showObat?: boolean;
   /** CED-branded PDF export (devis/dpgf only); hide it for other types when false */
   showCed?: boolean;
+  /** Suivisio-branded PDF export (devis/dpgf only); hide it for other types when false */
+  showSuivisio?: boolean;
   className?: string;
 }
 
-export function ExportBar({ documentId, showXlsx = true, showObat = false, showCed = false, className }: ExportBarProps) {
+export function ExportBar({ documentId, showXlsx = true, showObat = false, showCed = false, showSuivisio = false, className }: ExportBarProps) {
   const [loading, setLoading] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const base: ExportFormat[] = showXlsx ? ALL_FORMATS : ["pdf", "docx"];
   const withObat: ExportFormat[] = showObat ? [...base, "obat"] : base;
-  const formats: ExportFormat[] = showCed ? [...withObat, "ced"] : withObat;
+  const withCed: ExportFormat[] = showCed ? [...withObat, "ced"] : withObat;
+  const formats: ExportFormat[] = showSuivisio ? [...withCed, "suivisio"] : withCed;
 
   async function handleExport(fmt: ExportFormat) {
     setLoading(fmt);
