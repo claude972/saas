@@ -282,6 +282,13 @@ export const api = {
   exportDocumentUrl(id: string, format: ExportFormat): string {
     return `${BASE_URL}/documents/${id}/export?format=${format}`;
   },
+  /** Email a document's PDF to a recipient (direct send). */
+  emailDocument(
+    id: string,
+    input: { to: string; subject?: string; message?: string; brand?: ExportFormat },
+  ): Promise<{ status: string; to: string; filename: string }> {
+    return request(`/documents/${id}/email`, { method: "POST", body: input });
+  },
 
   // ---------- Logs ----------
   listLogs(): Promise<LogEntry[]> {

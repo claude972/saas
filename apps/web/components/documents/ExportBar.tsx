@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Download, AlertTriangle } from "lucide-react";
+import { Download, AlertTriangle, Mail } from "lucide-react";
 import type { ExportFormat } from "@/lib/types";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { Spinner } from "@/components/ui/Spinner";
+import { EmailModal, type BrandOption } from "@/components/documents/EmailModal";
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
@@ -92,17 +93,31 @@ interface ExportBarProps {
   showCed?: boolean;
   /** Suivisio-branded PDF export (devis/dpgf only); hide it for other types when false */
   showSuivisio?: boolean;
+  /** Show the "Envoyer par email" button (devis/dpgf). */
+  showEmail?: boolean;
+  /** Recipient prefilled in the email modal (client email). */
+  defaultEmail?: string;
+  /** Document title, used to prefill the email subject. */
+  documentTitle?: string;
   className?: string;
 }
 
-export function ExportBar({ documentId, showXlsx = true, showObat = false, showCed = false, showSuivisio = false, className }: ExportBarProps) {
+export function ExportBar({ documentId, showXlsx = true, showObat = false, showCed = false, showSuivisio = false, showEmail = false, defaultEmail = "", documentTitle = "", className }: ExportBarProps) {
   const [loading, setLoading] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   const base: ExportFormat[] = showXlsx ? ALL_FORMATS : ["pdf", "docx"];
   const withObat: ExportFormat[] = showObat ? [...base, "obat"] : base;
   const withCed: ExportFormat[] = showCed ? [...withObat, "ced"] : withObat;
   const formats: ExportFormat[] = showSuivisio ? [...withCed, "suivisio"] : withCed;
+
+  // PDF variants offered in the email modal (default = PDF OM2).
+  const emailBrands: BrandOption[] = [
+    { value: "pdf", label: "PDF OM2" },
+    ...(showCed ? [{ value: "ced", label: "CED" } as BrandOption] : []),
+    ...(showSuivisio ? [{ value: "suivisio", label: "Suivisio" } as BrandOption] : []),
+  ];
 
   async function handleExport(fmt: ExportFormat) {
     setLoading(fmt);
@@ -145,7 +160,30 @@ export function ExportBar({ documentId, showXlsx = true, showObat = false, showC
             </button>
           );
         })}
+
+        {showEmail && (
+          <button
+            type="button"
+            onClick={() => setEmailOpen(true)}
+            disabled={loading !== null}
+            aria-label="Envoyer le devis par email"
+            className="disp flex h-[30px] items-center gap-1.5 rounded-[7px] border border-line-soft bg-bg-2 px-3 text-[11.5px] font-semibold text-text2 transition-colors hover:border-amber-line hover:text-text"
+          >
+            <Mail size={13} strokeWidth={2.2} aria-hidden />
+            Email
+          </button>
+        )}
       </div>
+
+      {emailOpen && (
+        <EmailModal
+          documentId={documentId}
+          defaultTo={defaultEmail}
+          defaultSubject={documentTitle ? `Votre devis — ${documentTitle}` : "Votre devis"}
+          brands={emailBrands}
+          onClose={() => setEmailOpen(false)}
+        />
+      )}
 
       {error && (
         <div className="flex items-center gap-1.5 text-[11.5px] text-stop">

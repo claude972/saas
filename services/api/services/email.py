@@ -32,6 +32,9 @@ class EmailNotConfigured(RuntimeError):
 # Brand → suffixe de fichier pour les variantes brandées du devis.
 _BRAND_SUFFIX = {"ced": "-CED", "suivisio": "-SUIVISIO"}
 
+# Brand → nom d'expéditeur affiché (l'adresse reste SMTP_FROM).
+_BRAND_SENDER = {"pdf": "OM2", "om2": "OM2", "ced": "CED", "suivisio": "Suivisio"}
+
 
 async def render_document_pdf(document: Any, company: Any, brand: str = "pdf") -> tuple[bytes, str]:
     """Render a document to PDF bytes for the given brand.
@@ -108,8 +111,10 @@ async def send_document_email(
     pdf_bytes, filename = await render_document_pdf(document, company, brand)
 
     sender = settings.SMTP_FROM or settings.SMTP_USER
+    # Nom d'expéditeur selon la variante (OM2/CED/Suivisio), sinon réglage global.
+    sender_name = _BRAND_SENDER.get(brand, settings.SMTP_FROM_NAME)
     msg = EmailMessage()
-    msg["From"] = formataddr((settings.SMTP_FROM_NAME, sender)) if settings.SMTP_FROM_NAME else sender
+    msg["From"] = formataddr((sender_name, sender)) if sender_name else sender
     msg["To"] = to
     msg["Subject"] = subject or f"Devis — {_s(getattr(document, 'title', '')) or 'document'}"
     msg.set_content(message or "Bonjour,\n\nVeuillez trouver ci-joint votre devis.\n\nCordialement,")

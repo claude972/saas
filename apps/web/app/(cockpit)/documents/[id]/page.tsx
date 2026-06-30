@@ -295,6 +295,9 @@ export default function DocumentPage() {
             showObat={doc.document_type === "quote" || doc.document_type === "dpgf"}
             showCed={doc.document_type === "quote" || doc.document_type === "dpgf"}
             showSuivisio={doc.document_type === "quote" || doc.document_type === "dpgf"}
+            showEmail={doc.document_type === "quote" || doc.document_type === "dpgf"}
+            defaultEmail={typeof doc.content?.client_email === "string" ? doc.content.client_email : ""}
+            documentTitle={doc.title}
           />
         </div>
 
