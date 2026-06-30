@@ -59,10 +59,13 @@ async function downloadExport(documentId: string, format: ExportFormat): Promise
     new Blob([blob], { type: FORMAT_MIMES[format] }),
   );
 
-  // Determine filename from Content-Disposition or fall back to generic name
+  // Determine filename from Content-Disposition or fall back to generic name.
+  // The fallback extension is the file type, not the export format key
+  // ("ced" is a PDF variant → .pdf).
+  const fallbackExt = format === "ced" ? "pdf" : format;
   const disposition = res.headers.get("Content-Disposition") ?? "";
   const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
-  const filename = match?.[1]?.replace(/['"]/g, "") ?? `document.${format}`;
+  const filename = match?.[1]?.replace(/['"]/g, "") ?? `document.${fallbackExt}`;
 
   const a = document.createElement("a");
   a.href = objectUrl;

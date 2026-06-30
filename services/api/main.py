@@ -168,6 +168,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Expose Content-Disposition so the browser (cross-origin web→api) can read
+    # the real download filename (e.g. "devis-CED.pdf") instead of falling back
+    # to a generic name with the format as extension.
+    expose_headers=["Content-Disposition"],
 )
 
 # Mount routers at their contractual prefixes.
