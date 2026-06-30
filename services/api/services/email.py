@@ -66,6 +66,11 @@ def _send_sync(msg: EmailMessage) -> None:
     """Blocking SMTP send (run via ``asyncio.to_thread``)."""
     host, port = settings.SMTP_HOST, settings.SMTP_PORT
     context = ssl.create_default_context()
+    if not settings.SMTP_VERIFY_CERT:
+        # Hébergement mutualisé : le certificat (ex. *.lwspanel.com) ne matche
+        # pas le nom d'hôte. On chiffre toujours, mais sans vérifier le cert.
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
     if port == 465:
         with smtplib.SMTP_SSL(host, port, context=context, timeout=30) as server:
             if settings.SMTP_USER:

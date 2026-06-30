@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""           # adresse expéditeur ; défaut = SMTP_USER si vide
     SMTP_FROM_NAME: str = ""      # nom affiché de l'expéditeur (optionnel)
     SMTP_USE_TLS: bool = True     # STARTTLS sur 587 ; ignoré si port 465 (SSL implicite)
+    # Vérification stricte du certificat TLS. À mettre à False pour les serveurs
+    # mutualisés dont le certificat ne correspond pas au nom d'hôte (ex. LWS :
+    # cert *.lwspanel.com servi pour mail.<domaine>).
+    SMTP_VERIFY_CERT: bool = True
 
     @property
     def smtp_configured(self) -> bool:
