@@ -77,9 +77,14 @@ class Settings(BaseSettings):
     # Fournisseur d'envoi d'email :
     #   "smtp"  — SMTP direct (OK en local ; BLOQUÉ sur Railway, qui ferme les
     #             ports SMTP sortants 25/465/587).
-    #   "brevo" — API HTTPS Brevo (port 443) : seule option fiable sur Railway.
+    #   "brevo" — API HTTPS Brevo (port 443).
+    #   "relay" — relais HTTPS auto-hébergé (VPS) qui envoie via SMTP LWS.
     EMAIL_PROVIDER: str = "smtp"
     BREVO_API_KEY: str = ""
+    # Relais SMTP auto-hébergé (voir services/mailrelay). Appelé en HTTPS depuis
+    # Railway ; envoie via le SMTP LWS depuis le VPS.
+    MAIL_RELAY_URL: str = ""       # ex. https://relay.o-m2.fr
+    MAIL_RELAY_SECRET: str = ""    # secret partagé avec le relais
 
     # Email (SMTP) — envoi des documents (devis) par mail. Vides => envoi désactivé.
     # Railway bloque le port 25 : utiliser 587 (STARTTLS) ou 465 (SSL implicite).
@@ -106,6 +111,8 @@ class Settings(BaseSettings):
         sender = self.SMTP_FROM or self.SMTP_USER
         if self.EMAIL_PROVIDER == "brevo":
             return bool(self.BREVO_API_KEY and sender)
+        if self.EMAIL_PROVIDER == "relay":
+            return bool(self.MAIL_RELAY_URL and self.MAIL_RELAY_SECRET and sender)
         return self.smtp_configured
 
     @field_validator("DATABASE_URL", mode="after")

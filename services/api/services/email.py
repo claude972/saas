@@ -128,6 +128,35 @@ async def _send_brevo(
         raise RuntimeError(f"Brevo API {resp.status_code}: {resp.text[:300]}")
 
 
+async def _send_via_relay(
+    *,
+    sender_email: str,
+    sender_name: str,
+    to: str,
+    subject: str,
+    text: str,
+    pdf_bytes: bytes,
+    filename: str,
+) -> None:
+    """Send via the self-hosted HTTPS relay (VPS) that performs the SMTP send."""
+    payload = {
+        "to": to,
+        "subject": subject,
+        "text": text,
+        "from_email": sender_email,
+        "from_name": sender_name or "",
+        "filename": filename,
+        "pdf_base64": base64.b64encode(pdf_bytes).decode("ascii"),
+    }
+    url = settings.MAIL_RELAY_URL.rstrip("/") + "/send"
+    async with httpx.AsyncClient(timeout=40) as client:
+        resp = await client.post(
+            url, headers={"X-Relay-Secret": settings.MAIL_RELAY_SECRET}, json=payload
+        )
+    if resp.status_code >= 300:
+        raise RuntimeError(f"Relais {resp.status_code}: {resp.text[:300]}")
+
+
 async def send_document_email(
     db: "AsyncSession",
     document: Any,
@@ -159,6 +188,11 @@ async def send_document_email(
 
     if settings.EMAIL_PROVIDER == "brevo":
         await _send_brevo(
+            sender_email=sender, sender_name=sender_name, to=to,
+            subject=subj, text=text, pdf_bytes=pdf_bytes, filename=filename,
+        )
+    elif settings.EMAIL_PROVIDER == "relay":
+        await _send_via_relay(
             sender_email=sender, sender_name=sender_name, to=to,
             subject=subj, text=text, pdf_bytes=pdf_bytes, filename=filename,
         )
