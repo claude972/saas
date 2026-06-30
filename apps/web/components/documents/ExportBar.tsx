@@ -17,6 +17,7 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
   docx: "Word",
   xlsx: "Excel",
   obat: "Obat",
+  ced: "CED",
 };
 
 const FORMAT_MIMES: Record<ExportFormat, string> = {
@@ -24,6 +25,7 @@ const FORMAT_MIMES: Record<ExportFormat, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   obat: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ced: "application/pdf",
 };
 
 const ALL_FORMATS: ExportFormat[] = ["pdf", "docx", "xlsx"];
@@ -81,15 +83,18 @@ interface ExportBarProps {
   showXlsx?: boolean;
   /** obat export only makes sense for devis/dpgf; hide it for other types when false */
   showObat?: boolean;
+  /** CED-branded PDF export (devis/dpgf only); hide it for other types when false */
+  showCed?: boolean;
   className?: string;
 }
 
-export function ExportBar({ documentId, showXlsx = true, showObat = false, className }: ExportBarProps) {
+export function ExportBar({ documentId, showXlsx = true, showObat = false, showCed = false, className }: ExportBarProps) {
   const [loading, setLoading] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const base: ExportFormat[] = showXlsx ? ALL_FORMATS : ["pdf", "docx"];
-  const formats: ExportFormat[] = showObat ? [...base, "obat"] : base;
+  const withObat: ExportFormat[] = showObat ? [...base, "obat"] : base;
+  const formats: ExportFormat[] = showCed ? [...withObat, "ced"] : withObat;
 
   async function handleExport(fmt: ExportFormat) {
     setLoading(fmt);

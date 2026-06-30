@@ -15,14 +15,38 @@ Never raises — missing data yields masked/empty sections.
 
 from __future__ import annotations
 
+import base64
 import html as _html_mod
 from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from models import CompanySettings, Document
 
 from services.exporters import _ch, _lst, _parse_quote, _s
+
+# Accent colours per brand variant.
+_OM2_RED = "#E30613"
+_CED_GREEN = "#0A8A0A"
+
+_BRAND_ASSETS = Path(__file__).resolve().parent / "brand_assets"
+
+
+@lru_cache(maxsize=4)
+def _asset_data_uri(filename: str) -> str:
+    """Return a ``data:image/png;base64,...`` URI for a bundled brand asset.
+
+    Cached so the file is read and encoded once per process. Returns an empty
+    string if the asset is missing (renderer then omits the image).
+    """
+    path = _BRAND_ASSETS / filename
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return ""
+    return "data:image/png;base64," + base64.b64encode(raw).decode("ascii")
 
 
 # ---------------------------------------------------------------------------
@@ -105,13 +129,19 @@ def _om2_logo_svg(css_class: str = "logo", m_color: str = "#ffffff") -> str:
 # ---------------------------------------------------------------------------
 
 
-def _render_header(doc: Any, c: dict) -> str:
+def _render_header(doc: Any, c: dict, brand: str = "om2") -> str:
     number = _e(_derive_number(doc))
     company_name = _e(c["name"])
-    logo_url = _s(c.get("logo_url", ""))
 
-    if logo_url:
-        logo_block = f'<img class="logo" src="{_html_mod.escape(logo_url)}" alt="{company_name}">'
+    if brand == "ced":
+        # CED variant: bundled green logo on the black header, no company tag.
+        ced_logo = _asset_data_uri("ced-logo.png")
+        if ced_logo:
+            logo_block = f'<img class="logo" src="{ced_logo}" alt="CED">'
+        else:
+            logo_block = (
+                '<div style="color:#fff;font-size:20px;font-weight:700;letter-spacing:.04em;">CED</div>'
+            )
     else:
         logo_block = _om2_logo_svg("logo", "#ffffff")
 
@@ -147,16 +177,24 @@ def _render_strip(content: dict) -> str:
   </div>"""
 
 
-def _render_parties(content: dict, c: dict, devis_title: str = "") -> str:
-    # Emitter card — logo OM2 (ou logo personnalisé) au-dessus du nom.
+def _render_parties(content: dict, c: dict, brand: str = "om2", devis_title: str = "") -> str:
+    # Emitter card — logo (OM2 SVG / logo personnalisé / CED) au-dessus du nom.
     # Le nom par défaut "Mon Entreprise BTP" (placeholder) n'est pas affiché :
     # l'identité visuelle repose sur le logo.
     emitter_name = _e(_display_name(c["name"]))
-    logo_url = _s(c.get("logo_url", ""))
-    if logo_url:
-        emitter_logo = f'<img class="brand" src="{_html_mod.escape(logo_url)}" alt="{emitter_name}">'
+    if brand == "ced":
+        ced_logo_dark = _asset_data_uri("ced-logo-noir.png")
+        emitter_logo = (
+            f'<img class="brand" src="{ced_logo_dark}" alt="CED">'
+            if ced_logo_dark
+            else _om2_logo_svg("brand", "#0A0A0A")
+        )
     else:
-        emitter_logo = _om2_logo_svg("brand", "#0A0A0A")
+        logo_url = _s(c.get("logo_url", ""))
+        if logo_url:
+            emitter_logo = f'<img class="brand" src="{_html_mod.escape(logo_url)}" alt="{emitter_name}">'
+        else:
+            emitter_logo = _om2_logo_svg("brand", "#0A0A0A")
     emitter_lines: list[str] = []
     if c["address"]:
         emitter_lines.append(_e(c["address"]))
@@ -344,9 +382,10 @@ def _render_accept(tva_rate: float) -> str:
     </div>"""
 
 
-def _render_footer(content: dict, c: dict) -> str:
-    # Column 1 — Entreprise (le placeholder "Mon Entreprise BTP" est masqué)
-    company_name = _e(_display_name(c["name"]))
+def _render_footer(content: dict, c: dict, brand: str = "om2") -> str:
+    # Column 1 — Entreprise. CED → nom de marque ; sinon le placeholder
+    # "Mon Entreprise BTP" est masqué.
+    company_name = "CED" if brand == "ced" else _e(_display_name(c["name"]))
     company_lines: list[str] = []
     if c["siret"]:
         company_lines.append(f"SIRET {_e(c['siret'])}")
@@ -382,18 +421,22 @@ def _render_footer(content: dict, c: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def render_devis_html(doc: Any, company: Any) -> str:
+def render_devis_html(doc: Any, company: Any, brand: str = "om2") -> str:
     """Render a complete A4 HTML string for a devis or DPGF document.
 
     Args:
         doc:     Document ORM row (or any object with ``content``, ``id``,
                  ``title``, ``document_type`` attributes).
         company: CompanySettings ORM row, or ``None``.
+        brand:   ``"om2"`` (default — red accent, company logo) or ``"ced"``
+                 (green accent, bundled CED logo, black emitter logo,
+                 two-column footer).
 
     Returns:
         A self-contained HTML string suitable for Chromium PDF rendering.
         Never raises; missing data yields empty/masked sections.
     """
+    accent = _CED_GREEN if brand == "ced" else _OM2_RED
     try:
         content: dict = getattr(doc, "content", None) or {}
         c = _ch(company)
@@ -416,13 +459,13 @@ def render_devis_html(doc: Any, company: Any) -> str:
             render_lines.append(merged)
 
         devis_title = _s(getattr(doc, "title", ""))
-        header_html = _render_header(doc, c)
+        header_html = _render_header(doc, c, brand)
         strip_html = _render_strip(content)
-        parties_html = _render_parties(content, c, devis_title)
+        parties_html = _render_parties(content, c, brand, devis_title)
         table_html = _render_lines_table(render_lines, tva_rate) if render_lines else ""
         foot_html = _render_foot(content, total_ht, total_tva, total_ttc, tva_rate)
         accept_html = _render_accept(tva_rate)
-        footer_html = _render_footer(content, c)
+        footer_html = _render_footer(content, c, brand)
 
     except Exception:  # noqa: BLE001 — never propagate, render defensively
         header_html = ""
@@ -443,7 +486,7 @@ def render_devis_html(doc: Any, company: Any) -> str:
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root{{--noir:#0A0A0A;--rouge:#E30613;--g900:#16181d;--g600:#5b616e;--g400:#9aa0ac;--g200:#e7e9ee;--g100:#f3f4f7;--papier:#fdfdfd}}
+  :root{{--noir:#0A0A0A;--rouge:{accent};--g900:#16181d;--g600:#5b616e;--g400:#9aa0ac;--g200:#e7e9ee;--g100:#f3f4f7;--papier:#fdfdfd}}
   *{{margin:0;padding:0;box-sizing:border-box}}
   html{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   body{{font-family:'Inter',system-ui,sans-serif;color:var(--noir);background:#d9dbe0;line-height:1.5;padding:32px 16px}}

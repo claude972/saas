@@ -676,6 +676,7 @@ function DocumentDetail({
           documentId={doc.id}
           showXlsx={doc.document_type === "quote" || doc.document_type === "dpgf"}
           showObat={doc.document_type === "quote" || doc.document_type === "dpgf"}
+          showCed={doc.document_type === "quote" || doc.document_type === "dpgf"}
         />
       </div>
 
