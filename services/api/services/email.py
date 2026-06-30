@@ -11,11 +11,14 @@ n'est pas configuré, :func:`send_document_email` lève ``EmailNotConfigured``.
 from __future__ import annotations
 
 import asyncio
+import base64
 import smtplib
 import ssl
 from email.message import EmailMessage
 from email.utils import formataddr
 from typing import TYPE_CHECKING, Any
+
+import httpx
 
 from config import settings
 from core.audit_logger import log_event
@@ -88,6 +91,43 @@ def _send_sync(msg: EmailMessage) -> None:
             server.send_message(msg)
 
 
+async def _send_brevo(
+    *,
+    sender_email: str,
+    sender_name: str,
+    to: str,
+    subject: str,
+    text: str,
+    pdf_bytes: bytes,
+    filename: str,
+) -> None:
+    """Send via the Brevo transactional API (HTTPS 443 — works on Railway)."""
+    sender: dict[str, str] = {"email": sender_email}
+    if sender_name:
+        sender["name"] = sender_name
+    payload = {
+        "sender": sender,
+        "to": [{"email": to}],
+        "subject": subject,
+        "textContent": text,
+        "attachment": [
+            {"name": filename, "content": base64.b64encode(pdf_bytes).decode("ascii")}
+        ],
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={
+                "api-key": settings.BREVO_API_KEY,
+                "content-type": "application/json",
+                "accept": "application/json",
+            },
+            json=payload,
+        )
+    if resp.status_code >= 300:
+        raise RuntimeError(f"Brevo API {resp.status_code}: {resp.text[:300]}")
+
+
 async def send_document_email(
     db: "AsyncSession",
     document: Any,
@@ -103,9 +143,10 @@ async def send_document_email(
     Raises :class:`EmailNotConfigured` if SMTP is not set up. On success,
     journalises a ``document.emailed`` event and returns the attachment filename.
     """
-    if not settings.smtp_configured:
+    if not settings.email_configured:
         raise EmailNotConfigured(
-            "SMTP non configuré : renseignez SMTP_HOST, SMTP_FROM/SMTP_USER (et identifiants)."
+            "Envoi email non configuré : renseignez le fournisseur (EMAIL_PROVIDER) et ses "
+            "identifiants (BREVO_API_KEY pour Brevo, ou SMTP_* pour SMTP) + une adresse expéditeur."
         )
 
     pdf_bytes, filename = await render_document_pdf(document, company, brand)
@@ -113,14 +154,22 @@ async def send_document_email(
     sender = settings.SMTP_FROM or settings.SMTP_USER
     # Nom d'expéditeur selon la variante (OM2/CED/Suivisio), sinon réglage global.
     sender_name = _BRAND_SENDER.get(brand, settings.SMTP_FROM_NAME)
-    msg = EmailMessage()
-    msg["From"] = formataddr((sender_name, sender)) if sender_name else sender
-    msg["To"] = to
-    msg["Subject"] = subject or f"Devis — {_s(getattr(document, 'title', '')) or 'document'}"
-    msg.set_content(message or "Bonjour,\n\nVeuillez trouver ci-joint votre devis.\n\nCordialement,")
-    msg.add_attachment(pdf_bytes, maintype="application", subtype="pdf", filename=filename)
+    subj = subject or f"Devis — {_s(getattr(document, 'title', '')) or 'document'}"
+    text = message or "Bonjour,\n\nVeuillez trouver ci-joint votre devis.\n\nCordialement,"
 
-    await asyncio.to_thread(_send_sync, msg)
+    if settings.EMAIL_PROVIDER == "brevo":
+        await _send_brevo(
+            sender_email=sender, sender_name=sender_name, to=to,
+            subject=subj, text=text, pdf_bytes=pdf_bytes, filename=filename,
+        )
+    else:
+        msg = EmailMessage()
+        msg["From"] = formataddr((sender_name, sender)) if sender_name else sender
+        msg["To"] = to
+        msg["Subject"] = subj
+        msg.set_content(text)
+        msg.add_attachment(pdf_bytes, maintype="application", subtype="pdf", filename=filename)
+        await asyncio.to_thread(_send_sync, msg)
 
     await log_event(
         db,

@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     # Laissé vide par défaut pour le développement local (endpoint refusé si vide).
     VEILLE_TICK_SECRET: str = ""
 
+    # Fournisseur d'envoi d'email :
+    #   "smtp"  — SMTP direct (OK en local ; BLOQUÉ sur Railway, qui ferme les
+    #             ports SMTP sortants 25/465/587).
+    #   "brevo" — API HTTPS Brevo (port 443) : seule option fiable sur Railway.
+    EMAIL_PROVIDER: str = "smtp"
+    BREVO_API_KEY: str = ""
+
     # Email (SMTP) — envoi des documents (devis) par mail. Vides => envoi désactivé.
     # Railway bloque le port 25 : utiliser 587 (STARTTLS) ou 465 (SSL implicite).
     SMTP_HOST: str = ""
@@ -92,6 +99,14 @@ class Settings(BaseSettings):
     def smtp_configured(self) -> bool:
         """True when SMTP host + a sender address are set (envoi possible)."""
         return bool(self.SMTP_HOST and (self.SMTP_FROM or self.SMTP_USER))
+
+    @property
+    def email_configured(self) -> bool:
+        """True when the active email provider can send (sender + credentials)."""
+        sender = self.SMTP_FROM or self.SMTP_USER
+        if self.EMAIL_PROVIDER == "brevo":
+            return bool(self.BREVO_API_KEY and sender)
+        return self.smtp_configured
 
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
