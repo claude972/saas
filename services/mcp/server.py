@@ -573,6 +573,37 @@ async def update_document(document_id: str, content: dict) -> dict:
     return await _request("PATCH", f"/documents/{document_id}", json={"content": content})
 
 
+@mcp.tool()
+async def request_document_email(
+    document_id: str,
+    to: str,
+    subject: str = "",
+    message: str = "",
+    brand: str = "pdf",
+) -> dict:
+    """Demande l'envoi d'un devis par email — crée une VALIDATION HUMAINE.
+
+    L'email n'est PAS envoyé immédiatement : une demande de validation est
+    créée. Un humain l'accepte dans le cockpit (section Validations), et c'est
+    seulement à ce moment que le PDF est généré et envoyé au destinataire.
+
+    Paramètres :
+    - document_id : UUID du devis/document à envoyer.
+    - to          : adresse email du destinataire.
+    - subject     : objet du mail (optionnel ; un objet par défaut sinon).
+    - message     : corps du mail (optionnel ; un texte par défaut sinon).
+    - brand       : variante du PDF — "pdf"/"om2" (rouge), "ced" (vert) ou
+                    "suivisio" (bleu).
+
+    Retourne la demande de validation créée, ou {"error": "..."} en cas d'échec.
+    """
+    return await _request(
+        "POST",
+        f"/documents/{document_id}/email/request-approval",
+        json={"to": to, "subject": subject, "message": message, "brand": brand},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Outils — Journal d'audit (logs)
 # ---------------------------------------------------------------------------

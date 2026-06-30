@@ -74,6 +74,21 @@ class Settings(BaseSettings):
     # Laissé vide par défaut pour le développement local (endpoint refusé si vide).
     VEILLE_TICK_SECRET: str = ""
 
+    # Email (SMTP) — envoi des documents (devis) par mail. Vides => envoi désactivé.
+    # Railway bloque le port 25 : utiliser 587 (STARTTLS) ou 465 (SSL implicite).
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""           # adresse expéditeur ; défaut = SMTP_USER si vide
+    SMTP_FROM_NAME: str = ""      # nom affiché de l'expéditeur (optionnel)
+    SMTP_USE_TLS: bool = True     # STARTTLS sur 587 ; ignoré si port 465 (SSL implicite)
+
+    @property
+    def smtp_configured(self) -> bool:
+        """True when SMTP host + a sender address are set (envoi possible)."""
+        return bool(self.SMTP_HOST and (self.SMTP_FROM or self.SMTP_USER))
+
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
     def _async_dsn(cls, v: str) -> str:

@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from enums import (
     ApprovalStatus,
@@ -40,6 +40,19 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+# ---------------------------------------------------------------------------
+# Document email
+# ---------------------------------------------------------------------------
+class DocumentEmailInput(BaseModel):
+    """Payload to email a document's PDF to a recipient."""
+
+    to: EmailStr
+    subject: str = ""
+    message: str = ""
+    # "pdf"/"om2" (devis OM²), "ced" (vert) ou "suivisio" (bleu).
+    brand: str = "pdf"
 
 
 # ---------------------------------------------------------------------------

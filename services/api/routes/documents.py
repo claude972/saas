@@ -30,10 +30,10 @@ from core.audit_logger import log_event
 from core.risk_engine import compute_risk
 from core.security import get_current_user
 from deps import get_db
-from enums import DocumentStatus
+from enums import DocumentStatus, RiskLevel
 from models import CompanySettings, Document
-from schemas import DocumentCreate, DocumentRead, DocumentUpdate
-from services.exporters import ExportUnavailable, export_document
+from schemas import ApprovalRead, DocumentCreate, DocumentEmailInput, DocumentRead, DocumentUpdate
+from services.exporters import ExportUnavailable, _s, export_document
 
 router = APIRouter()
 
@@ -382,4 +382,75 @@ async def export_document_route(
         io.BytesIO(content_bytes),
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/{document_id}/email")
+async def email_document_route(
+    document_id: uuid.UUID,
+    body: DocumentEmailInput,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+) -> dict:
+    """Send the document's PDF to a recipient by email (direct send).
+
+    Used for human-initiated sends from the cockpit. The PDF brand follows
+    ``body.brand`` ("pdf"/"om2", "ced" or "suivisio").
+    """
+    document = await db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable.")
+
+    company = await _load_company(db)
+    from services.email import EmailNotConfigured, send_document_email
+
+    try:
+        filename = await send_document_email(
+            db, document, company,
+            to=str(body.to), subject=body.subject, message=body.message, brand=body.brand,
+        )
+    except EmailNotConfigured as exc:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 — surface the SMTP failure to the caller
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Échec de l'envoi de l'email : {exc}",
+        )
+
+    return {"status": "sent", "to": str(body.to), "filename": filename}
+
+
+@router.post("/{document_id}/email/request-approval", response_model=ApprovalRead)
+async def request_email_approval_route(
+    document_id: uuid.UUID,
+    body: DocumentEmailInput,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """Create a human approval to email the document (agent/MCP-initiated).
+
+    The email is only sent once a human accepts the approval in the cockpit
+    (see :func:`core.approval_engine.apply_decision`).
+    """
+    document = await db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable.")
+
+    title = _s(getattr(document, "title", "")) or "document"
+    return await create_approval(
+        db,
+        title=f"Envoi par email à {body.to}",
+        description=f"Envoyer le devis « {title} » à {body.to}.",
+        risk_level=RiskLevel.MEDIUM,
+        project_id=getattr(document, "project_id", None),
+        command_id=None,
+        task_id=getattr(document, "task_id", None),
+        payload={
+            "action": "send_document_email",
+            "document_id": str(document_id),
+            "to": str(body.to),
+            "subject": body.subject,
+            "message": body.message,
+            "brand": body.brand,
+        },
     )

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit_logger import log_event
 from enums import ApprovalStatus, DocumentStatus, RiskLevel, TaskStatus
-from models import Approval, Document, Task
+from models import Approval, CompanySettings, Document, Task
 
 
 async def create_approval(
@@ -134,4 +134,41 @@ async def apply_decision(
             "documents": [str(d.id) for d in documents],
         },
     )
+
+    # Deferred action: email the document once the send is approved.
+    payload = approval.payload or {}
+    if accepted and payload.get("action") == "send_document_email":
+        await _run_send_document_email(db, approval, payload)
+
     return approval
+
+
+async def _run_send_document_email(db: AsyncSession, approval: Approval, payload: dict) -> None:
+    """Send the document email carried by an accepted approval's payload.
+
+    Failures are journalised but never raised — the approval stays accepted.
+    """
+    from services.email import send_document_email  # local import: avoids cycle
+
+    try:
+        document = await db.get(Document, uuid.UUID(str(payload["document_id"])))
+        if document is None:
+            raise ValueError("document introuvable")
+        company = (await db.execute(select(CompanySettings))).scalars().first()
+        await send_document_email(
+            db, document, company,
+            to=payload["to"],
+            subject=payload.get("subject", ""),
+            message=payload.get("message", ""),
+            brand=payload.get("brand", "pdf"),
+        )
+    except Exception as exc:  # noqa: BLE001 — report, don't break the decision
+        await log_event(
+            db,
+            event_type="document.email_failed",
+            message=f"Échec de l'envoi email après validation: {exc}",
+            level="error",
+            project_id=approval.project_id,
+            task_id=approval.task_id,
+            payload={"approval_id": str(approval.id), "error": str(exc)},
+        )
