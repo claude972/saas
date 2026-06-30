@@ -2,8 +2,8 @@ services:
   relay:
     build: .
     restart: unless-stopped
-    # env_file passe les valeurs telles quelles (pas d'interpolation $ → un mot
-    # de passe contenant '$' est préservé).
+    # env_file passe les valeurs telles quelles (un mot de passe avec '$' doit
+    # être échappé en '$$' dans le .env).
     env_file:
       - .env
     expose:
@@ -14,9 +14,11 @@ services:
     restart: unless-stopped
     depends_on:
       - relay
+    # Port 80 = challenge ACME Let's Encrypt ; 8443 = relais en HTTPS.
+    # On NE touche PAS au 443 (déjà pris par Tailscale).
     ports:
       - "80:80"
-      - "443:443"
+      - "8443:8443"
     environment:
       RELAY_DOMAIN: ${RELAY_DOMAIN}
     volumes:
