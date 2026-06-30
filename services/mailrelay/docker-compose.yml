@@ -2,13 +2,10 @@ services:
   relay:
     build: .
     restart: unless-stopped
-    environment:
-      RELAY_SECRET: ${RELAY_SECRET}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_VERIFY_CERT: ${SMTP_VERIFY_CERT}
+    # env_file passe les valeurs telles quelles (pas d'interpolation $ → un mot
+    # de passe contenant '$' est préservé).
+    env_file:
+      - .env
     expose:
       - "8080"
 
