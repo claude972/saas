@@ -574,6 +574,37 @@ async def update_document(document_id: str, content: dict) -> dict:
 
 
 @mcp.tool()
+async def send_document_email(
+    document_id: str,
+    to: str,
+    subject: str = "",
+    message: str = "",
+    brand: str = "pdf",
+) -> dict:
+    """Envoie IMMÉDIATEMENT un devis par email (sans validation humaine).
+
+    Le PDF est généré et envoyé au destinataire via le relais SMTP. À utiliser
+    quand l'agent doit envoyer directement. Pour passer par une validation
+    humaine avant envoi, utiliser plutôt ``request_document_email``.
+
+    Paramètres :
+    - document_id : UUID du devis/document à envoyer.
+    - to          : adresse email du destinataire.
+    - subject     : objet du mail (optionnel ; objet par défaut sinon).
+    - message     : corps du mail (optionnel ; texte par défaut sinon).
+    - brand       : variante du PDF — "pdf"/"om2" (rouge), "ced" (vert) ou
+                    "suivisio" (bleu).
+
+    Retourne {"status":"sent","to":...,"filename":...} ou {"error":"..."}.
+    """
+    return await _request(
+        "POST",
+        f"/documents/{document_id}/email",
+        json={"to": to, "subject": subject, "message": message, "brand": brand},
+    )
+
+
+@mcp.tool()
 async def request_document_email(
     document_id: str,
     to: str,
