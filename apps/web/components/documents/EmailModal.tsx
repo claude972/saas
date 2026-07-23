@@ -12,6 +12,7 @@ const BRAND_COLOR: Partial<Record<ExportFormat, string>> = {
   pdf: "#E30613",
   ced: "#0A8A0A",
   suivisio: "#1184CC",
+  brume: "#0E80D0",
 };
 
 export interface BrandOption {

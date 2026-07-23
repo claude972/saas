@@ -20,6 +20,7 @@ const FORMAT_LABELS: Record<ExportFormat, string> = {
   obat: "Obat",
   ced: "CED",
   suivisio: "Suivisio",
+  brume: "Brume",
 };
 
 const FORMAT_MIMES: Record<ExportFormat, string> = {
@@ -29,6 +30,7 @@ const FORMAT_MIMES: Record<ExportFormat, string> = {
   obat: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ced: "application/pdf",
   suivisio: "application/pdf",
+  brume: "application/pdf",
 };
 
 const ALL_FORMATS: ExportFormat[] = ["pdf", "docx", "xlsx"];
@@ -65,7 +67,8 @@ async function downloadExport(documentId: string, format: ExportFormat): Promise
   // Determine filename from Content-Disposition or fall back to generic name.
   // The fallback extension is the file type, not the export format key
   // ("ced" is a PDF variant → .pdf).
-  const fallbackExt = format === "ced" || format === "suivisio" ? "pdf" : format;
+  const fallbackExt =
+    format === "ced" || format === "suivisio" || format === "brume" ? "pdf" : format;
   const disposition = res.headers.get("Content-Disposition") ?? "";
   const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
   const filename = match?.[1]?.replace(/['"]/g, "") ?? `document.${fallbackExt}`;
@@ -93,6 +96,8 @@ interface ExportBarProps {
   showCed?: boolean;
   /** Suivisio-branded PDF export (devis/dpgf only); hide it for other types when false */
   showSuivisio?: boolean;
+  /** Brume Caraïbes-branded PDF export (devis/dpgf only); hide it for other types when false */
+  showBrume?: boolean;
   /** Show the "Envoyer par email" button (devis/dpgf). */
   showEmail?: boolean;
   /** Recipient prefilled in the email modal (client email). */
@@ -102,7 +107,7 @@ interface ExportBarProps {
   className?: string;
 }
 
-export function ExportBar({ documentId, showXlsx = true, showObat = false, showCed = false, showSuivisio = false, showEmail = false, defaultEmail = "", documentTitle = "", className }: ExportBarProps) {
+export function ExportBar({ documentId, showXlsx = true, showObat = false, showCed = false, showSuivisio = false, showBrume = false, showEmail = false, defaultEmail = "", documentTitle = "", className }: ExportBarProps) {
   const [loading, setLoading] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -110,13 +115,15 @@ export function ExportBar({ documentId, showXlsx = true, showObat = false, showC
   const base: ExportFormat[] = showXlsx ? ALL_FORMATS : ["pdf", "docx"];
   const withObat: ExportFormat[] = showObat ? [...base, "obat"] : base;
   const withCed: ExportFormat[] = showCed ? [...withObat, "ced"] : withObat;
-  const formats: ExportFormat[] = showSuivisio ? [...withCed, "suivisio"] : withCed;
+  const withSuivisio: ExportFormat[] = showSuivisio ? [...withCed, "suivisio"] : withCed;
+  const formats: ExportFormat[] = showBrume ? [...withSuivisio, "brume"] : withSuivisio;
 
   // PDF variants offered in the email modal (default = PDF OM2).
   const emailBrands: BrandOption[] = [
     { value: "pdf", label: "PDF OM2" },
     ...(showCed ? [{ value: "ced", label: "CED" } as BrandOption] : []),
     ...(showSuivisio ? [{ value: "suivisio", label: "Suivisio" } as BrandOption] : []),
+    ...(showBrume ? [{ value: "brume", label: "Brume" } as BrandOption] : []),
   ];
 
   async function handleExport(fmt: ExportFormat) {

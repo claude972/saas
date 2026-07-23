@@ -284,10 +284,10 @@ async def export_document_route(
             detail="Document introuvable.",
         )
 
-    if fmt not in ("pdf", "docx", "xlsx", "obat", "ced", "suivisio"):
+    if fmt not in ("pdf", "docx", "xlsx", "obat", "ced", "suivisio", "brume"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Format non supporté: '{fmt}'. Valeurs acceptées: pdf, docx, xlsx, obat, ced, suivisio.",
+            detail=f"Format non supporté: '{fmt}'. Valeurs acceptées: pdf, docx, xlsx, obat, ced, suivisio, brume.",
         )
 
     company = await _load_company(db)
@@ -312,10 +312,11 @@ async def export_document_route(
                         ),
                     )
 
-        elif fmt in ("ced", "suivisio"):
-            # Branded PDF variant (CED = vert, Suivisio = bleu). Devis/DPGF only,
-            # requires the Chromium HTML renderer (no reportlab equivalent).
-            brand_label = fmt.upper() if fmt == "ced" else "Suivisio"
+        elif fmt in ("ced", "suivisio", "brume"):
+            # Branded PDF variant (CED = vert, Suivisio/Brume = bleu). Devis/DPGF
+            # only, requires the Chromium HTML renderer (no reportlab equivalent).
+            brand_label = {"ced": "CED", "suivisio": "Suivisio", "brume": "Brume Caraïbes"}[fmt]
+            file_suffix = {"ced": "CED", "suivisio": "SUIVISIO", "brume": "BRUME"}[fmt]
             if getattr(document, "document_type", None) not in ("quote", "dpgf"):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -339,7 +340,7 @@ async def export_document_route(
             content_bytes = await render_pdf_from_html(html)
             media_type = "application/pdf"
             stem = _filename_stem(_s(getattr(document, "title", "document")) or "document")
-            filename = f"{stem}-{brand_label.upper()}.pdf"
+            filename = f"{stem}-{file_suffix}.pdf"
 
         elif fmt == "pdf" and getattr(document, "document_type", None) in ("quote", "dpgf"):
             # Attempt branded Chromium PDF; fall back to reportlab on any failure.

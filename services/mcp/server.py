@@ -592,8 +592,8 @@ async def send_document_email(
     - to          : adresse email du destinataire.
     - subject     : objet du mail (optionnel ; objet par défaut sinon).
     - message     : corps du mail (optionnel ; texte par défaut sinon).
-    - brand       : variante du PDF — "pdf"/"om2" (rouge), "ced" (vert) ou
-                    "suivisio" (bleu).
+    - brand       : variante du PDF — "pdf"/"om2" (rouge), "ced" (vert),
+                    "suivisio" (bleu) ou "brume" (Brume Caraïbes, bleu).
 
     Retourne {"status":"sent","to":...,"filename":...} ou {"error":"..."}.
     """
@@ -623,8 +623,8 @@ async def request_document_email(
     - to          : adresse email du destinataire.
     - subject     : objet du mail (optionnel ; un objet par défaut sinon).
     - message     : corps du mail (optionnel ; un texte par défaut sinon).
-    - brand       : variante du PDF — "pdf"/"om2" (rouge), "ced" (vert) ou
-                    "suivisio" (bleu).
+    - brand       : variante du PDF — "pdf"/"om2" (rouge), "ced" (vert),
+                    "suivisio" (bleu) ou "brume" (Brume Caraïbes, bleu).
 
     Retourne la demande de validation créée, ou {"error": "..."} en cas d'échec.
     """

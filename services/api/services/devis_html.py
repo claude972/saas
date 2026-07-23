@@ -31,6 +31,7 @@ from services.exporters import _ch, _lst, _parse_quote, _s
 _OM2_RED = "#E30613"
 _CED_GREEN = "#0A8A0A"
 _SUIVISIO_BLUE = "#1184CC"
+_BRUME_BLUE = "#0E80D0"
 
 # Bundled brand variants: embedded logo + accent colour. "om2" stays handled
 # separately (inline SVG logo + custom company logo + masked placeholder name).
@@ -48,6 +49,12 @@ _BRANDS = {
         "header_logo": "suivisio-logo-blanc.png",
         "emitter_logo": "suivisio-logo.png",
         "name": "Suivisio",
+    },
+    "brume": {
+        "accent": _BRUME_BLUE,
+        "header_logo": "brume-logo-blanc.png",
+        "emitter_logo": "brume-logo.png",
+        "name": "Brume Caraïbes",
     },
 }
 

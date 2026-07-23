@@ -33,10 +33,13 @@ class EmailNotConfigured(RuntimeError):
 
 
 # Brand → suffixe de fichier pour les variantes brandées du devis.
-_BRAND_SUFFIX = {"ced": "-CED", "suivisio": "-SUIVISIO"}
+_BRAND_SUFFIX = {"ced": "-CED", "suivisio": "-SUIVISIO", "brume": "-BRUME"}
 
 # Brand → nom d'expéditeur affiché (l'adresse reste SMTP_FROM).
-_BRAND_SENDER = {"pdf": "OM2", "om2": "OM2", "ced": "CED", "suivisio": "Suivisio"}
+_BRAND_SENDER = {
+    "pdf": "OM2", "om2": "OM2", "ced": "CED",
+    "suivisio": "Suivisio", "brume": "Brume Caraïbes",
+}
 
 
 async def render_document_pdf(document: Any, company: Any, brand: str = "pdf") -> tuple[bytes, str]:
