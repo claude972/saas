@@ -21,6 +21,24 @@ interface FieldDef {
 }
 
 const FIELD_CONFIGS: Record<string, FieldDef[]> = {
+  intervention: [
+    { key: "reference", label: "Référence / N° d'affaire", type: "text", placeholder: "#2026-2A61" },
+    { key: "client_name", label: "Client", type: "text" },
+    { key: "client_phone", label: "Téléphone client", type: "text" },
+    { key: "client_email", label: "Email client", type: "text" },
+    { key: "intervention_address", label: "Adresse d'intervention", type: "text" },
+    { key: "date_intervention", label: "Date d'intervention", type: "text", placeholder: "23/07/2026" },
+    { key: "heure_arrivee", label: "Heure d'arrivée", type: "text", placeholder: "08:30" },
+    { key: "heure_depart", label: "Heure de départ", type: "text", placeholder: "12:00" },
+    { key: "technicien", label: "Technicien intervenant", type: "text" },
+    { key: "fonction", label: "Fonction", type: "text" },
+    { key: "meteo", label: "Météo / Conditions", type: "text" },
+    { key: "type_checked", label: "Type d'intervention (cochés)", type: "list", placeholder: "Un type par ligne : Diagnostic, Installation, Maintenance, Dépannage" },
+    { key: "objet", label: "Objet de l'intervention", type: "textarea", placeholder: "Décrivez l'objet de l'intervention…" },
+    { key: "travaux_checked", label: "Travaux réalisés (cochés)", type: "list", placeholder: "Un travail par ligne : Installation, Mise en conformité…" },
+    { key: "commentaires", label: "Commentaires généraux", type: "textarea" },
+    { key: "reserves", label: "Réserves / Observations / Actions à prévoir", type: "textarea" },
+  ],
   tender_response: [
     {
       key: "pieces_demandees",
