@@ -117,6 +117,7 @@ export function InterventionEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState<number | null>(null);
 
   const set = (k: keyof typeof f) => (v: string) => {
     setF((s) => ({ ...s, [k]: v }));
@@ -130,12 +131,29 @@ export function InterventionEditor({
   const onPhoto = useCallback(async (i: number, file: File | null) => {
     if (!file) return;
     setError(null);
+    setPhotoBusy(i);
     try {
-      const url = await fileToCompressedDataUri(file);
+      let f = file;
+      // iPhone HEIC/HEIF n'est pas décodable par <canvas> (ni par Chromium pour
+      // le PDF) → conversion en JPEG côté navigateur avant compression.
+      const isHeic = /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+      if (isHeic) {
+        const heic2any = (await import("heic2any")).default;
+        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        f = new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
+      }
+      const url = await fileToCompressedDataUri(f);
       setPhotos((prev) => prev.map((p, idx) => (idx === i ? { ...p, url } : p)));
       setSaved(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Photo illisible.");
+      setError(
+        err instanceof Error
+          ? `Photo « ${PHOTO_SLOTS[i]} » : ${err.message}`
+          : "Photo illisible.",
+      );
+    } finally {
+      setPhotoBusy(null);
     }
   }, []);
 
@@ -199,8 +217,13 @@ export function InterventionEditor({
           {photos.map((p, i) => (
             <div key={i} className="flex flex-col gap-2">
               <span className="text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-text3">{p.caption}</span>
-              <label className="relative grid aspect-[3/4] cursor-pointer place-items-center overflow-hidden rounded-[8px] border border-dashed border-line bg-bg-2 text-text3 transition-colors hover:border-amber-line">
-                {p.url ? (
+              <label className="relative grid aspect-[3/4] cursor-pointer place-items-center overflow-hidden rounded-[8px] border border-dashed border-line bg-bg-2 text-text3 transition-colors hover:border-amber-line focus-within:border-amber-line focus-within:ring-2 focus-within:ring-amber-line">
+                {photoBusy === i ? (
+                  <span className="flex flex-col items-center gap-1.5 text-[10px] uppercase tracking-[0.08em]">
+                    <Spinner size={20} />
+                    Conversion…
+                  </span>
+                ) : p.url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={p.url} alt={p.caption} className="h-full w-full object-cover" />
                 ) : (
@@ -211,7 +234,9 @@ export function InterventionEditor({
                 )}
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif"
+                  aria-label={`Photo ${p.caption}`}
+                  disabled={photoBusy !== null}
                   className="absolute inset-0 cursor-pointer opacity-0"
                   onChange={(e) => onPhoto(i, e.target.files?.[0] ?? null)}
                 />
