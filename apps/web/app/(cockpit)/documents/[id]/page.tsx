@@ -293,10 +293,10 @@ export default function DocumentPage() {
             documentId={doc.id}
             showXlsx={doc.document_type === "quote" || doc.document_type === "dpgf"}
             showObat={doc.document_type === "quote" || doc.document_type === "dpgf"}
-            showCed={doc.document_type === "quote" || doc.document_type === "dpgf"}
-            showSuivisio={doc.document_type === "quote" || doc.document_type === "dpgf"}
-            showBrume={doc.document_type === "quote" || doc.document_type === "dpgf"}
-            showEmail={doc.document_type === "quote" || doc.document_type === "dpgf"}
+            showCed={doc.document_type === "quote" || doc.document_type === "dpgf" || doc.document_type === "intervention"}
+            showSuivisio={doc.document_type === "quote" || doc.document_type === "dpgf" || doc.document_type === "intervention"}
+            showBrume={doc.document_type === "quote" || doc.document_type === "dpgf" || doc.document_type === "intervention"}
+            showEmail={doc.document_type === "quote" || doc.document_type === "dpgf" || doc.document_type === "intervention"}
             defaultEmail={typeof doc.content?.client_email === "string" ? doc.content.client_email : ""}
             documentTitle={doc.title}
           />

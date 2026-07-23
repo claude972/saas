@@ -54,13 +54,17 @@ async def render_document_pdf(document: Any, company: Any, brand: str = "pdf") -
     stem = _filename_stem(_s(getattr(document, "title", "document")) or "document")
     doc_type = getattr(document, "document_type", None)
 
-    if doc_type in ("quote", "dpgf"):
-        from services.devis_html import render_devis_html
+    if doc_type in ("quote", "dpgf", "intervention"):
         from services.pdf_render import pdf_render_available, render_pdf_from_html
 
         render_brand = "om2" if brand in ("pdf", "om2") else brand
         if pdf_render_available():
-            html = render_devis_html(document, company, brand=render_brand)
+            if doc_type == "intervention":
+                from services.intervention_html import render_intervention_html
+                html = render_intervention_html(document, company, brand=render_brand)
+            else:
+                from services.devis_html import render_devis_html
+                html = render_devis_html(document, company, brand=render_brand)
             if "<tr" in html:
                 pdf = await render_pdf_from_html(html)
                 suffix = _BRAND_SUFFIX.get(render_brand, "")

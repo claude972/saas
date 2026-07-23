@@ -85,3 +85,4 @@ class DocumentType(str, Enum):
     DCE = "dce"
     CCTP = "cctp"
     CCAP = "ccap"
+    INTERVENTION = "intervention"

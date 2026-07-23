@@ -317,12 +317,12 @@ async def export_document_route(
             # only, requires the Chromium HTML renderer (no reportlab equivalent).
             brand_label = {"ced": "CED", "suivisio": "Suivisio", "brume": "Brume Caraïbes"}[fmt]
             file_suffix = {"ced": "CED", "suivisio": "SUIVISIO", "brume": "BRUME"}[fmt]
-            if getattr(document, "document_type", None) not in ("quote", "dpgf"):
+            doc_type = getattr(document, "document_type", None)
+            if doc_type not in ("quote", "dpgf", "intervention"):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"L'export {brand_label} ne concerne que les devis (quote/dpgf).",
+                    detail=f"L'export {brand_label} ne concerne que les devis et comptes rendus.",
                 )
-            from services.devis_html import render_devis_html
             from services.exporters import _filename_stem, _s
             from services.pdf_render import pdf_render_available, render_pdf_from_html
 
@@ -331,7 +331,12 @@ async def export_document_route(
                     status_code=status.HTTP_501_NOT_IMPLEMENTED,
                     detail=f"Rendu PDF (Chromium) indisponible pour l'export {brand_label}.",
                 )
-            html = render_devis_html(document, company, brand=fmt)
+            if doc_type == "intervention":
+                from services.intervention_html import render_intervention_html
+                html = render_intervention_html(document, company, brand=fmt)
+            else:
+                from services.devis_html import render_devis_html
+                html = render_devis_html(document, company, brand=fmt)
             if "<tr" not in html:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -342,21 +347,26 @@ async def export_document_route(
             stem = _filename_stem(_s(getattr(document, "title", "document")) or "document")
             filename = f"{stem}-{file_suffix}.pdf"
 
-        elif fmt == "pdf" and getattr(document, "document_type", None) in ("quote", "dpgf"):
+        elif fmt == "pdf" and getattr(document, "document_type", None) in ("quote", "dpgf", "intervention"):
             # Attempt branded Chromium PDF; fall back to reportlab on any failure.
             content_bytes = None
             media_type = "application/pdf"
+            doc_type = getattr(document, "document_type", None)
             from services.exporters import _filename_stem, _s
             stem = _filename_stem(_s(getattr(document, "title", "document")) or "document")
             filename = f"{stem}.pdf"
             try:
-                from services.devis_html import render_devis_html
                 from services.pdf_render import pdf_render_available, render_pdf_from_html
                 if pdf_render_available():
-                    html = render_devis_html(document, company)
+                    if doc_type == "intervention":
+                        from services.intervention_html import render_intervention_html
+                        html = render_intervention_html(document, company)
+                    else:
+                        from services.devis_html import render_devis_html
+                        html = render_devis_html(document, company)
                     # Guard: only ship the branded PDF if the body actually has
-                    # line rows; otherwise fall back to reportlab (never deliver
-                    # an empty branded sheet on a template/data error).
+                    # rows; otherwise fall back to reportlab (never deliver an
+                    # empty branded sheet on a template/data error).
                     if "<tr" in html:
                         content_bytes = await render_pdf_from_html(html)
             except Exception:

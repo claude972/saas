@@ -19,6 +19,7 @@ import {
   Microscope,
   Receipt,
   RefreshCw,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -58,6 +59,7 @@ const EDITABLE_STATUSES = new Set<DocumentStatus>([
 // Métier label + pictogram per document_type produced by the agents.
 const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
   quote: { label: "Devis", icon: Receipt },
+  intervention: { label: "Compte rendu d'intervention", icon: Wrench },
   dpgf: { label: "DPGF", icon: FileSpreadsheet },
   tender_response: { label: "Réponse appel d'offre", icon: FileSearch },
   analyse_ao: { label: "Analyse AO", icon: Microscope },
@@ -72,6 +74,7 @@ const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
 // Stable métier ordering for the type filter tabs.
 const TYPE_ORDER = [
   "quote",
+  "intervention",
   "dpgf",
   "tender_response",
   "analyse_ao",
@@ -140,6 +143,7 @@ export default function DocumentsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Type filter (null = all). Keeps the dense list usable as it grows.
   const [filter, setFilter] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     const list = await api.listDocuments();
@@ -226,16 +230,52 @@ export default function DocumentsPage() {
     }
   }
 
+  async function createIntervention() {
+    setCreating(true);
+    setError(null);
+    try {
+      const created = await api.createDocument({
+        document_type: "intervention",
+        title: "Compte rendu d'intervention",
+        content: {
+          photos: [
+            { caption: "Avant intervention" },
+            { caption: "Pendant l'intervention" },
+            { caption: "Après intervention" },
+          ],
+        },
+      });
+      setDocs(await load());
+      setFilter("intervention");
+      setSelectedId(created.id);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Création impossible.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5 px-[22px] py-[18px]">
-      <header className="oc-fade">
-        <h1 className="disp text-[19px] font-semibold tracking-[0.01em]">
-          Documents
-        </h1>
-        <p className="mt-1 text-[12.5px] text-text3">
-          Tous les documents générés par les sous-agents — toujours produits en
-          brouillon, validés par le backend avant tout envoi.
-        </p>
+      <header className="oc-fade flex items-start justify-between gap-4">
+        <div>
+          <h1 className="disp text-[19px] font-semibold tracking-[0.01em]">
+            Documents
+          </h1>
+          <p className="mt-1 text-[12.5px] text-text3">
+            Tous les documents générés par les sous-agents — toujours produits en
+            brouillon, validés par le backend avant tout envoi.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={createIntervention}
+          disabled={creating}
+          className="flex flex-none items-center gap-2 rounded-[9px] bg-amber px-4 py-2 font-[var(--font-saira)] text-[12.5px] font-semibold tracking-[0.04em] text-[color:var(--amber-fg)] transition-colors hover:bg-amber-2 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {creating ? <Spinner size={14} /> : <Wrench size={15} strokeWidth={2.2} aria-hidden />}
+          Nouveau compte rendu
+        </button>
       </header>
 
       {docs && docs.length > 0 && <DocsStrip docs={docs} />}
@@ -676,10 +716,10 @@ function DocumentDetail({
           documentId={doc.id}
           showXlsx={doc.document_type === "quote" || doc.document_type === "dpgf"}
           showObat={doc.document_type === "quote" || doc.document_type === "dpgf"}
-          showCed={doc.document_type === "quote" || doc.document_type === "dpgf"}
-          showSuivisio={doc.document_type === "quote" || doc.document_type === "dpgf"}
-          showBrume={doc.document_type === "quote" || doc.document_type === "dpgf"}
-          showEmail={doc.document_type === "quote" || doc.document_type === "dpgf"}
+          showCed={doc.document_type === "quote" || doc.document_type === "dpgf" || doc.document_type === "intervention"}
+          showSuivisio={doc.document_type === "quote" || doc.document_type === "dpgf" || doc.document_type === "intervention"}
+          showBrume={doc.document_type === "quote" || doc.document_type === "dpgf" || doc.document_type === "intervention"}
+          showEmail={doc.document_type === "quote" || doc.document_type === "dpgf" || doc.document_type === "intervention"}
           defaultEmail={typeof doc.content?.client_email === "string" ? doc.content.client_email : ""}
           documentTitle={doc.title}
         />

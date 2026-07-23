@@ -269,6 +269,13 @@ export const api = {
   listDocuments(): Promise<AppDocument[]> {
     return request<AppDocument[]>("/documents");
   },
+  createDocument(input: {
+    document_type: string;
+    title: string;
+    content?: Record<string, unknown>;
+  }): Promise<AppDocument> {
+    return request<AppDocument>("/documents", { method: "POST", body: input });
+  },
   getDocument(id: string): Promise<AppDocument> {
     return request<AppDocument>(`/documents/${id}`);
   },
