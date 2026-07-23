@@ -22,6 +22,7 @@ from services.devis_html import (
     _BRANDS,
     _asset_data_uri,
     _derive_number,
+    _display_name,
     _e,
     _om2_logo_svg,
     _today,
@@ -130,7 +131,7 @@ def _render_parties(content: dict, c: dict, brand: str) -> str:
       <div class="card">
         <div class="label">Émetteur</div>
         {emitter_logo}
-        <div class="name" style="font-size:14px">{_e(c["name"])}</div>
+        {f'<div class="name" style="font-size:14px">{_e(_display_name(c["name"]))}</div>' if _display_name(c["name"]) else ''}
         {f'<div class="line">{em_detail}</div>' if em_detail else ''}
         {f'<div class="contact">{em_contact_html}</div>' if em_contact_html else ''}
       </div>
@@ -204,8 +205,12 @@ def _render_photos(content: dict) -> str:
         if not isinstance(ph, dict):
             ph = {}
         cap = _e(ph.get("caption") or "Photo")
-        url = _s(ph.get("url"))
-        if url:
+        url = _s(ph.get("url")).strip()
+        # N'afficher une image que si l'URL est réellement une image
+        # (data:image/... ou http[s]://). Évite les cadres « cassés » quand un
+        # agent a rempli url avec autre chose qu'une image.
+        is_img = url.startswith("data:image/") or url.startswith("http://") or url.startswith("https://")
+        if is_img:
             media = f'<div class="ph"><img src="{_html_mod.escape(url)}" alt="{cap}"></div>'
         else:
             media = '<div class="ph"><span class="t">Insérer photo ici</span></div>'
@@ -218,7 +223,7 @@ def _render_photos(content: dict) -> str:
             '<div class="l"></div><div class="l" style="margin-top:5px"></div></div>'
         )
         blocks.append(f'<div class="photo"><div class="cap">{cap}</div>{media}{desc_html}</div>')
-    return f"""    <div class="sec">
+    return f"""    <div class="sec sec-photos">
       <div class="h">Photos de l'intervention</div>
       <div class="body"><div class="photos">{''.join(blocks)}</div></div>
     </div>"""
@@ -331,6 +336,13 @@ def render_intervention_html(doc: Any, company: Any, brand: str = "om2") -> str:
   table.mat th{{background:var(--g100);text-align:left;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--g600);padding:8px 10px;border:1px solid var(--g200)}}
   table.mat td{{border:1px solid var(--g200);height:26px;padding:4px 10px}}
   .ribbon{{position:absolute;bottom:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--accent) 0 30%,var(--noir) 30% 100%)}}
+  /* Pagination : ne pas couper les blocs au milieu d'une page. */
+  .sec{{break-inside:avoid;page-break-inside:avoid}}
+  .sec-photos{{break-inside:auto;page-break-inside:auto}}
+  .sec>.h{{break-after:avoid;page-break-after:avoid}}
+  .photo{{break-inside:avoid;page-break-inside:avoid}}
+  .card,.parties,.grid4,.two{{break-inside:avoid;page-break-inside:avoid}}
+  table.mat tr,table.mat thead{{break-inside:avoid;page-break-inside:avoid}}
   @media print{{body{{background:#fff;padding:0}}.sheet{{box-shadow:none;width:auto}}@page{{size:A4;margin:0}}}}
 </style>
 </head>
