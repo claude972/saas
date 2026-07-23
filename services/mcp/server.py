@@ -538,6 +538,51 @@ async def list_documents(
 
 
 @mcp.tool()
+async def create_document(
+    document_type: str,
+    title: str,
+    content: dict | None = None,
+    project_id: str | None = None,
+) -> dict:
+    """Crée un nouveau document (ex. compte rendu d'intervention) en brouillon.
+
+    Utiliser pour créer un document que l'agent va remplir ensuite via
+    update_document. Le rendu (trame) est fixe côté serveur : seul le contenu
+    (content) définit le modèle.
+
+    Types utiles :
+    - "intervention" : compte rendu d'intervention (export brandé OM²/CED/
+      Suivisio/Brume, comme les devis).
+    - "quote" : devis.
+
+    Champs content d'un compte rendu "intervention" (tous optionnels) :
+      reference, emitted_at, client_name, client_address, client_phone,
+      client_email, intervention_address, date_intervention, heure_arrivee,
+      heure_depart, technicien, fonction, meteo,
+      type_options (liste), type_checked (liste),
+      objet (texte), travaux_options (liste), travaux_checked (liste),
+      commentaires (texte),
+      photos (liste de {caption, url, description}),
+      materiel (liste de {designation, reference, quantite}),
+      reserves (texte).
+
+    Paramètres :
+    - document_type : ex. "intervention".
+    - title : titre du document.
+    - content : dict du contenu initial (optionnel).
+    - project_id : UUID de projet à rattacher (optionnel).
+
+    Retourne le document créé, ou {"error": "..."}.
+    """
+    payload: dict = {"document_type": document_type, "title": title}
+    if content is not None:
+        payload["content"] = content
+    if project_id:
+        payload["project_id"] = project_id
+    return await _request("POST", "/documents", json=payload)
+
+
+@mcp.tool()
 async def get_document(document_id: str) -> dict:
     """Récupère le détail complet d'un document par son UUID, y compris son contenu.
 
