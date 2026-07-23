@@ -165,7 +165,7 @@ def _render_header(doc: Any, c: dict, brand: str = "om2") -> str:
         name = _BRANDS[brand]["name"]
         logo = _asset_data_uri(_BRANDS[brand]["header_logo"])
         if logo:
-            logo_block = f'<img class="logo" src="{logo}" alt="{name}">'
+            logo_block = f'<img class="logo logo-{brand}" src="{logo}" alt="{name}">'
         else:
             logo_block = (
                 f'<div style="color:#fff;font-size:20px;font-weight:700;letter-spacing:.04em;">{name}</div>'
@@ -213,7 +213,7 @@ def _render_parties(content: dict, c: dict, brand: str = "om2", devis_title: str
     if brand in _BRANDS:
         elogo = _asset_data_uri(_BRANDS[brand]["emitter_logo"])
         emitter_logo = (
-            f'<img class="brand" src="{elogo}" alt="{_BRANDS[brand]["name"]}">'
+            f'<img class="brand brand-{brand}" src="{elogo}" alt="{_BRANDS[brand]["name"]}">'
             if elogo
             else _om2_logo_svg("brand", "#0A0A0A")
         )
@@ -525,6 +525,7 @@ def render_devis_html(doc: Any, company: Any, brand: str = "om2") -> str:
   /* En-tête version A */
   header{{background:var(--noir);color:#fff;padding:24px 26mm;display:flex;align-items:center;justify-content:space-between;gap:24px}}
   header .logo{{height:68px;width:auto;display:block}}
+  header .logo-brume{{height:92px}}
   header .right{{text-align:right;border-left:1px solid #2a2c31;padding-left:22px}}
   header .right .k{{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--g400)}}
   header .right .n{{font-size:21px;font-weight:700;margin-top:3px}}
@@ -542,6 +543,7 @@ def render_devis_html(doc: Any, company: Any, brand: str = "om2") -> str:
   .card{{border:1px solid var(--g200);border-radius:12px;padding:14px 16px}}
   .card .label{{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--g400);margin-bottom:7px}}
   .card .brand{{height:46px;width:auto;display:block;margin-bottom:8px}}
+  .card .brand-brume{{height:64px}}
   .card .name{{font-size:14px;font-weight:600;margin-bottom:3px}}
   .card .line{{font-size:11.5px;color:var(--g600);line-height:1.6}}
 
