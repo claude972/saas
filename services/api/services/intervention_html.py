@@ -199,7 +199,21 @@ def _render_travaux_commentaires(content: dict) -> str:
 
 
 def _render_photos(content: dict) -> str:
-    photos = _lst(content.get("photos")) or _DEFAULT_PHOTOS
+    photos = _lst(content.get("photos"))
+
+    def _has_img(p: Any) -> bool:
+        u = _s((p or {}).get("url") if isinstance(p, dict) else "").strip()
+        return u.startswith("data:image/") or u.startswith("http://") or u.startswith("https://")
+
+    # Ne garder que les emplacements qui ont une vraie image. Si aucune image
+    # n'est présente (modèle vierge à imprimer), afficher les emplacements tels
+    # quels (ou les 3 par défaut).
+    real = [p for p in photos if _has_img(p)]
+    if real:
+        photos = real
+    elif not photos:
+        photos = _DEFAULT_PHOTOS
+
     blocks: list[str] = []
     for ph in photos:
         if not isinstance(ph, dict):
@@ -324,12 +338,13 @@ def render_intervention_html(doc: Any, company: Any, brand: str = "om2") -> str:
   .chk .box{{width:13px;height:13px;border:1.5px solid var(--g400);border-radius:3px;flex:none}}
   .chk .box.on{{background:var(--accent);border-color:var(--accent)}}
   .two{{display:grid;grid-template-columns:1fr 1fr;gap:14px}}
-  .photos{{display:flex;flex-direction:column;gap:22px}}
+  .photos{{display:flex;flex-direction:column;align-items:center;gap:22px}}
+  .photo{{width:112mm;max-width:100%;margin:0 auto}}
   .photo .cap{{text-align:center;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--g600);font-weight:700;margin-bottom:8px}}
-  .photo .ph{{aspect-ratio:3/4;width:112mm;max-width:100%;margin:0 auto;border:1px dashed var(--g300);border-radius:8px;background:var(--g100);display:grid;place-items:center;color:var(--g400);overflow:hidden}}
+  .photo .ph{{aspect-ratio:3/4;width:100%;border:1px dashed var(--g300);border-radius:8px;background:var(--g100);display:grid;place-items:center;color:var(--g400);overflow:hidden}}
   .photo .ph img{{width:100%;height:100%;object-fit:cover}}
   .photo .ph .t{{font-size:10px;letter-spacing:.1em;text-transform:uppercase}}
-  .photo .desc{{width:112mm;max-width:100%;margin:10px auto 0}}
+  .photo .desc{{width:100%;margin-top:10px}}
   .photo .desc .k{{font-size:8.5px;color:var(--g600);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}}
   .photo .desc .l{{border-bottom:1px dotted var(--g300);height:14px}}
   table.mat{{width:100%;border-collapse:collapse;font-size:11.5px}}
