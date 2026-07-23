@@ -29,6 +29,7 @@ import { StatusChip } from "@/components/ui/StatusChip";
 import { Spinner } from "@/components/ui/Spinner";
 import { QuoteEditor } from "@/components/documents/QuoteEditor";
 import { ReportEditor } from "@/components/documents/ReportEditor";
+import { InterventionEditor } from "@/components/documents/InterventionEditor";
 import { ExportBar } from "@/components/documents/ExportBar";
 
 /* ------------------------------------------------------------------ */
@@ -307,6 +308,8 @@ export default function DocumentPage() {
           {mode === "edit" && canEdit ? (
             doc.document_type === "quote" || doc.document_type === "dpgf" ? (
               <QuoteEditor doc={doc} onSaved={handleSaved} />
+            ) : doc.document_type === "intervention" ? (
+              <InterventionEditor doc={doc} onSaved={handleSaved} />
             ) : (
               <ReportEditor doc={doc} onSaved={handleSaved} />
             )
