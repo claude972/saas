@@ -55,6 +55,18 @@ class DocumentEmailInput(BaseModel):
     brand: str = "pdf"
 
 
+class DocumentPhotoInput(BaseModel):
+    """Ajout d'une photo (image) à un compte rendu d'intervention."""
+
+    # Fournir l'une des deux : URL à télécharger, ou base64 (data URI accepté).
+    image_url: str | None = None
+    image_base64: str | None = None
+    caption: str = ""
+    description: str = ""
+    # Index 0-based de l'emplacement ; None => ajoute à la fin.
+    slot: int | None = None
+
+
 # ---------------------------------------------------------------------------
 # Project
 # ---------------------------------------------------------------------------

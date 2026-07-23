@@ -32,7 +32,7 @@ from core.security import get_current_user
 from deps import get_db
 from enums import DocumentStatus, RiskLevel
 from models import CompanySettings, Document
-from schemas import ApprovalRead, DocumentCreate, DocumentEmailInput, DocumentRead, DocumentUpdate
+from schemas import ApprovalRead, DocumentCreate, DocumentEmailInput, DocumentPhotoInput, DocumentRead, DocumentUpdate
 from services.exporters import ExportUnavailable, _s, export_document
 
 router = APIRouter()
@@ -465,3 +465,92 @@ async def request_email_approval_route(
             "brand": body.brand,
         },
     )
+
+
+@router.post("/{document_id}/photo")
+async def add_document_photo_route(
+    document_id: uuid.UUID,
+    body: DocumentPhotoInput,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+) -> dict:
+    """Attach an image to a document's ``content.photos`` (compte rendu).
+
+    Accepts an ``image_url`` (fetched server-side, e.g. a Telegram file URL) or
+    an ``image_base64`` payload. The image is converted/compressed to a JPEG
+    data URI and stored so it renders directly in the PDF export.
+    """
+    import httpx
+    from services.image_ingest import ingest_image_to_datauri, strip_data_uri_prefix
+
+    document = await db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable.")
+
+    # 1) Récupérer les octets de l'image.
+    raw: bytes
+    if body.image_url:
+        try:
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                resp = await client.get(body.image_url)
+            resp.raise_for_status()
+            raw = resp.content
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Téléchargement de l'image impossible : {exc}",
+            )
+    elif body.image_base64:
+        import base64 as _b64
+        try:
+            raw = _b64.b64decode(strip_data_uri_prefix(body.image_base64))
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"image_base64 invalide : {exc}",
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Fournir image_url ou image_base64.",
+        )
+
+    # 2) Convertir en JPEG data URI (HEIC géré si pillow-heif dispo).
+    try:
+        data_uri = ingest_image_to_datauri(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    # 3) Écrire dans content.photos (slot précis ou ajout).
+    content = dict(getattr(document, "content", None) or {})
+    photos = list(content.get("photos") or [])
+    entry = {"caption": body.caption, "url": data_uri, "description": body.description}
+    if body.slot is not None and body.slot >= 0:
+        while len(photos) <= body.slot:
+            photos.append({"caption": "", "url": "", "description": ""})
+        prev = photos[body.slot] if isinstance(photos[body.slot], dict) else {}
+        merged = dict(prev)
+        merged["url"] = data_uri
+        if body.caption:
+            merged["caption"] = body.caption
+        if body.description:
+            merged["description"] = body.description
+        merged.setdefault("caption", "")
+        merged.setdefault("description", "")
+        photos[body.slot] = merged
+        index = body.slot
+    else:
+        photos.append(entry)
+        index = len(photos) - 1
+
+    content["photos"] = photos
+    document.content = content  # reassign so SQLAlchemy flags the JSON dirty
+    await db.commit()
+    await log_event(
+        db,
+        event_type="document.photo_added",
+        message=f"Photo ajoutée au document « {_s(getattr(document, 'title', '')) or document_id} » (emplacement {index}).",
+        level="info",
+        payload={"document_id": str(document_id), "index": index},
+    )
+    return {"status": "ok", "index": index, "count": len(photos)}

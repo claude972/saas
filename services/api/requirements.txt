@@ -18,3 +18,5 @@ pyyaml
 httpx
 tzdata
 cryptography
+Pillow>=10
+pillow-heif>=0.16

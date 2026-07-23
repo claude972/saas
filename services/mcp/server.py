@@ -650,6 +650,48 @@ async def send_document_email(
 
 
 @mcp.tool()
+async def add_intervention_photo(
+    document_id: str,
+    image_url: str | None = None,
+    image_base64: str | None = None,
+    caption: str = "",
+    description: str = "",
+    slot: int | None = None,
+) -> dict:
+    """Attache une VRAIE photo à un compte rendu d'intervention.
+
+    À utiliser quand une photo est reçue (ex. via Telegram) : le backend
+    télécharge/décode l'image, la convertit en JPEG et la stocke dans le
+    compte rendu → elle apparaît dans le PDF export. Ne PAS mettre une URL ou un
+    nom de fichier dans le champ `url` via update_document : cela donne un cadre
+    cassé. Utiliser CET outil à la place.
+
+    Fournir l'un des deux :
+    - image_url : URL téléchargeable de l'image (ex. lien de fichier Telegram).
+    - image_base64 : contenu de l'image en base64 (data URI accepté).
+
+    Paramètres :
+    - document_id : UUID du compte rendu (type "intervention").
+    - caption : légende (ex. "Avant intervention").
+    - description : commentaire sous la photo.
+    - slot : index 0-based de l'emplacement à remplir ; omettre pour ajouter à la fin.
+
+    Retourne {"status":"ok","index":...,"count":...} ou {"error":"..."}.
+    """
+    return await _request(
+        "POST",
+        f"/documents/{document_id}/photo",
+        json={
+            "image_url": image_url,
+            "image_base64": image_base64,
+            "caption": caption,
+            "description": description,
+            "slot": slot,
+        },
+    )
+
+
+@mcp.tool()
 async def request_document_email(
     document_id: str,
     to: str,
