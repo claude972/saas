@@ -524,7 +524,7 @@ def render_devis_html(doc: Any, company: Any, brand: str = "om2") -> str:
 
   /* En-tête version A */
   header{{background:var(--noir);color:#fff;padding:24px 26mm;display:flex;align-items:center;justify-content:space-between;gap:24px}}
-  header .logo{{height:50px;display:block}}
+  header .logo{{height:68px;width:auto;display:block}}
   header .right{{text-align:right;border-left:1px solid #2a2c31;padding-left:22px}}
   header .right .k{{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--g400)}}
   header .right .n{{font-size:21px;font-weight:700;margin-top:3px}}
@@ -541,7 +541,7 @@ def render_devis_html(doc: Any, company: Any, brand: str = "om2") -> str:
   .parties{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}}
   .card{{border:1px solid var(--g200);border-radius:12px;padding:14px 16px}}
   .card .label{{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--g400);margin-bottom:7px}}
-  .card .brand{{height:32px;width:auto;display:block;margin-bottom:8px}}
+  .card .brand{{height:46px;width:auto;display:block;margin-bottom:8px}}
   .card .name{{font-size:14px;font-weight:600;margin-bottom:3px}}
   .card .line{{font-size:11.5px;color:var(--g600);line-height:1.6}}
 
@@ -588,7 +588,7 @@ def render_devis_html(doc: Any, company: Any, brand: str = "om2") -> str:
     footer{{margin-left:18px;margin-right:18px;grid-template-columns:1fr}}
     .strip{{flex-wrap:wrap}}.strip .c{{min-width:50%;flex:none}}.strip .c:first-child{{padding-left:18px}}
     .parties{{grid-template-columns:1fr}}.foot{{flex-direction:column}}.totals{{width:100%}}
-    header{{flex-wrap:wrap}}header .logo{{height:42px}}
+    header{{flex-wrap:wrap}}header .logo{{height:56px}}
   }}
 </style>
 </head>
